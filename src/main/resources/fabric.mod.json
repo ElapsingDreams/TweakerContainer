@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "id": "tweakerxihe",
+  "version": "${version}",
+  "name": "tweakerxihe",
+  "description": "",
+  "authors": [],
+  "contact": {},
+  "license": "MIT",
+  "icon": "assets/tweakerxihe/icon.png",
+  "environment": "client",
+  "entrypoints": {
+    "main": ["cn.envision.xihe.Tweakerxihe"],
+    "client": [
+      "cn.envision.xihe.client.XiheClient"
+    ]
+  },
+  "mixins": [
+    "tweakerxihe.mixins.json",
+    {
+      "config": "tweakerxihe.client.mixins.json",
+      "environment": "client"
+    }
+  ],
+  "depends": {
+    "fabricloader": ">=0.15.0",
+    "minecraft": "${minecraft_dependency}",
+    "malilib": "${malilib_dependency}",
+    "litematica": "${litematica_dependency}"
+  },
+  "accessWidener": "techutils.accesswidener"
+}

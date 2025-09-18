@@ -1,0 +1,35 @@
+/time set day
+/setblock ~ ~ ~ minecraft:acacia_door
+/highlightblock -20
+/highlightblock -20 36 -87
+/highlightblock ~ ~ ~
+/highlightblock -21 37 -87
+/highlightblock ~ ~ ~
+/highlightblockbyitem
+/highlightblockmode solid
+/highlightblockmode wireframe
+/highlightblock -20.27 37.06 -86.06
+/highlightblock -20 30 22
+/highlightblock -21 37 -82
+/highlightblock 21 37 82
+/highlightblock 21 37 -82
+/highlightblock -21 37 -82
+/highlightblock -21 37 -87
+/highlightblockmode solid
+/highlightblockmode wireframe
+/highlightblock -21 37 -87
+/highlightblockmode solid
+/highlightblockmode wireframe
+/highlightblock -21 37 -87
+/highlightblockmode wireframe
+/highlightblockmode solid
+/highlightblock -21 37 -87
+/highlightblockmode wireframe
+/highlightblock -21 37 -87
+/highlightblockmode solid
+/highlightblockmode wireframe
+/highlightblock -21 37 -87
+/highlightblockmode solid
+/highlightblockmode wireframe
+/highlightblockmode solid
+/highlightblock -21 37 -87

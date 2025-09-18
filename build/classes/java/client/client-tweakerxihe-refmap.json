@@ -1,0 +1,14 @@
+{
+  "mappings": {
+    "cn/envision/xihe/client/mixins/ClientPlayerInteractionManagerMixin": {
+      "interactBlock": "Lnet/minecraft/class_636;method_2896(Lnet/minecraft/class_746;Lnet/minecraft/class_1268;Lnet/minecraft/class_3965;)Lnet/minecraft/class_1269;"
+    }
+  },
+  "data": {
+    "named:intermediary": {
+      "cn/envision/xihe/client/mixins/ClientPlayerInteractionManagerMixin": {
+        "interactBlock": "Lnet/minecraft/class_636;method_2896(Lnet/minecraft/class_746;Lnet/minecraft/class_1268;Lnet/minecraft/class_3965;)Lnet/minecraft/class_1269;"
+      }
+    }
+  }
+}
