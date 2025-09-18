@@ -14,7 +14,7 @@ import org.joml.Vector3f;
 import java.util.Set;
 
 public class BlockHighlighterRender {
-    private static final Set<BlockPos> HIGHLIGHTED_BLOCKS = XiheClient.HIGHLIGHTED_BLOCKS;
+    private static final Set<BlockPos> HIGHLIGHTED_BLOCKS = TweakerXiheClient.HIGHLIGHTED_BLOCKS;
 
     public static void setup() {
         WorldRenderEvents.AFTER_TRANSLUCENT.register(context -> {

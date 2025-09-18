@@ -1,8 +1,7 @@
 package cn.envision.xihe.client.handler;
 
 
-import cn.envision.xihe.Tweakerxihe;
-import cn.envision.xihe.client.XiheClient;
+import cn.envision.xihe.client.TweakerXiheClient;
 import net.fabricmc.fabric.api.event.player.UseBlockCallback;
 import net.minecraft.text.Text;
 import net.minecraft.util.ActionResult;
@@ -36,8 +35,8 @@ public abstract class InteractionHandler {
         UseBlockCallback.EVENT.register((player, world, hand, hitResult) -> {
             if (player.isSneaking() && hitResult.getType() == BlockHitResult.Type.BLOCK) {
                 BlockPos pos = hitResult.getBlockPos();
-                if (XiheClient.HIGHLIGHTED_BLOCKS.contains(pos)) {
-                    XiheClient.HIGHLIGHTED_BLOCKS.remove(pos);
+                if (TweakerXiheClient.HIGHLIGHTED_BLOCKS.contains(pos)) {
+                    TweakerXiheClient.HIGHLIGHTED_BLOCKS.remove(pos);
                     player.sendMessage(Text.literal("Removed highlight at " + pos.toShortString()), true);
                     return ActionResult.SUCCESS;
                 }

@@ -11,7 +11,6 @@ import net.minecraft.client.world.ClientWorld;
 import net.minecraft.item.Item;
 import net.minecraft.registry.Registries;
 import net.minecraft.text.Text;
-import net.minecraft.util.Identifier;
 import net.minecraft.util.math.BlockPos;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import cn.envision.xihe.client.config.HighlightConfig;
@@ -24,7 +23,7 @@ import static net.fabricmc.fabric.api.client.command.v2.ClientCommandManager.arg
 import static net.fabricmc.fabric.api.client.command.v2.ClientCommandManager.literal;
 
 @Environment(EnvType.CLIENT)
-public class XiheClient implements ClientModInitializer {
+public class TweakerXiheClient implements ClientModInitializer {
     public static final Set<BlockPos> HIGHLIGHTED_BLOCKS = new HashSet<>();
 
     @Override
