@@ -37,3 +37,7 @@
 /weather clear
 /time set day
 /tp 0 0 0
+/time set day
+/highlightblock clear
+/time set day
+/highlightblock clear

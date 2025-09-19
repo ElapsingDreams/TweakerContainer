@@ -47,9 +47,11 @@ public abstract class InteractionHandler {
             return ActionResult.SUCCESS;
         }
 
-        // 处理容器点击
+        // 处理容器点击 - 设置临时处理坐标
         if (!player.isSneaking()) {
             InventoryOverlay.onContainerClick(hitResult);
+            // 新增：点击容器时设置临时处理坐标
+            BlockHighlighterRender.setTempProcessingPos(hitResult.getBlockPos());
         }
 
         return ActionResult.PASS;

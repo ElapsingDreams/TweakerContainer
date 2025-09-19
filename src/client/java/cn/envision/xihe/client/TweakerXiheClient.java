@@ -19,6 +19,7 @@ import cn.envision.xihe.client.handler.InteractionHandler;
 import java.util.HashSet;
 import java.util.Set;
 
+import static cn.envision.xihe.client.BlockHighlighterRender.clearTempHighlightedBlocks;
 import static net.fabricmc.fabric.api.client.command.v2.ClientCommandManager.argument;
 import static net.fabricmc.fabric.api.client.command.v2.ClientCommandManager.literal;
 
@@ -53,7 +54,17 @@ public class TweakerXiheClient implements ClientModInitializer {
                                                 context.getSource().sendFeedback(Text.literal("已在位置 " + pos.toShortString() + " 添加高亮"));
                                                 return 1;
                                             }))))
-            );
+            // 新增：清除所有高亮
+                    .then(literal("clear")
+                            .executes(context -> {
+                                // 清除所有相关高亮数据
+                                HIGHLIGHTED_BLOCKS.clear();
+                                clearTempHighlightedBlocks();
+                                BlockHighlighterRender.clearAll();
+
+                                context.getSource().sendFeedback(Text.literal("已清除所有高亮标记"));
+                                return 1;
+                            })));
 
             dispatcher.register(literal("highlightblockbyitem")
                     .then(argument("item", StringArgumentType.greedyString())

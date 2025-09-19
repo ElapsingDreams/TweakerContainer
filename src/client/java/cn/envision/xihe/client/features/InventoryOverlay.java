@@ -19,6 +19,9 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
+import static cn.envision.xihe.client.BlockHighlighterRender.clearTempHighlightedBlocks;
+import static cn.envision.xihe.client.TweakerXiheClient.HIGHLIGHTED_BLOCKS;
+
 public class InventoryOverlay {
     private static InventoryOverlay instance;
     private BlockPos currentContainerPos;
@@ -51,15 +54,17 @@ public class InventoryOverlay {
         Optional<LocalPlacementPos> placementPos = LocalPlacementPos.get(pos);
         if (placementPos.isPresent()) {
             // 是投影容器，设置为当前投影容器
+
+            //clearTempHighlightedBlocks();
             BlockHighlighterRender.setCurrentProjectionContainer(pos);
             getInstance().currentContainerPos = pos;
 
             // 获取投影容器需要的物品和当前物品，计算缺失的
-            Optional<SimpleInventory> schematicInv = PlacementContainerAccess.getSchematicInventory(pos, state);
-            if (schematicInv.isPresent()) {
-                List<ItemStack> missingItems = BlockHighlighterRender.findMissingItems(pos, schematicInv.get());
-                showMissingItemsHint(missingItems);
-            }
+            //Optional<SimpleInventory> schematicInv = PlacementContainerAccess.getSchematicInventory(pos, state);
+            //if (schematicInv.isPresent()) {
+            //    List<ItemStack> missingItems = BlockHighlighterRender.findMissingItems(pos, schematicInv.get());
+            //    showMissingItemsHint(missingItems);
+            //}
         } else {
             // 不是投影容器，作为仓储容器处理
             // 重复打开不会重复添加，只会刷新
