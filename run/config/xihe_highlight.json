@@ -1,4 +1,3 @@
 {
-  "triggerItem": "minecraft:shulker_box",
-  "highlightMode": "Solid"
+  "triggerItem": "minecraft:shulker_shell"
 }

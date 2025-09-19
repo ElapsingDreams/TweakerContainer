@@ -2,12 +2,24 @@
   "mappings": {
     "cn/envision/xihe/client/mixins/ClientPlayerInteractionManagerMixin": {
       "interactBlock": "Lnet/minecraft/class_636;method_2896(Lnet/minecraft/class_746;Lnet/minecraft/class_1268;Lnet/minecraft/class_3965;)Lnet/minecraft/class_1269;"
+    },
+    "cn/envision/xihe/client/mixins/HandledScreenMixin": {
+      "close": "Lnet/minecraft/class_465;method_25419()V"
+    },
+    "cn/envision/xihe/client/mixins/InventoryScreenMixin": {
+      "drawBackground": "Lnet/minecraft/class_490;method_2389(Lnet/minecraft/class_332;FII)V"
     }
   },
   "data": {
     "named:intermediary": {
       "cn/envision/xihe/client/mixins/ClientPlayerInteractionManagerMixin": {
         "interactBlock": "Lnet/minecraft/class_636;method_2896(Lnet/minecraft/class_746;Lnet/minecraft/class_1268;Lnet/minecraft/class_3965;)Lnet/minecraft/class_1269;"
+      },
+      "cn/envision/xihe/client/mixins/HandledScreenMixin": {
+        "close": "Lnet/minecraft/class_465;method_25419()V"
+      },
+      "cn/envision/xihe/client/mixins/InventoryScreenMixin": {
+        "drawBackground": "Lnet/minecraft/class_490;method_2389(Lnet/minecraft/class_332;FII)V"
       }
     }
   }

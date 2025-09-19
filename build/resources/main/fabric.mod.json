@@ -10,9 +10,11 @@
   "icon": "assets/tweakerxihe/icon.png",
   "environment": "client",
   "entrypoints": {
-    "main": ["cn.envision.xihe.Tweakerxihe"],
+    "main": [
+      "cn.envision.xihe.TweakerXihe"
+    ],
     "client": [
-      "cn.envision.xihe.client.XiheClient"
+      "cn.envision.xihe.client.TweakerXiheClient"
     ]
   },
   "mixins": [
