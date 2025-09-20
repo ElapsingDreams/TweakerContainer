@@ -21,6 +21,7 @@ import java.util.Optional;
 
 import static cn.envision.xihe.client.BlockHighlighterRender.clearTempHighlightedBlocks;
 import static cn.envision.xihe.client.TweakerXiheClient.HIGHLIGHTED_BLOCKS;
+import static cn.envision.xihe.client.config.HighlightConfig.getSW;
 
 public class InventoryOverlay {
     private static InventoryOverlay instance;
@@ -38,38 +39,44 @@ public class InventoryOverlay {
     }
 
     public static void onContainerClick(BlockHitResult hitResult) {
-        BlockPos pos = hitResult.getBlockPos();
-        World world = WorldUtils.getBestWorld(MinecraftClient.getInstance());
-        if (world == null) return;
+        if (getSW()) {
+            BlockPos pos = hitResult.getBlockPos();
+            World world = WorldUtils.getBestWorld(MinecraftClient.getInstance());
+            if (world == null) return;
 
-        BlockState state = world.getBlockState(pos);
-        Optional<Inventory> inventory = ContainerUtils.validateContainer(world, pos, state);
+            BlockState state = world.getBlockState(pos);
+            Optional<Inventory> inventory = ContainerUtils.validateContainer(world, pos, state);
 
-        // 检查是否是有效的容器
-        if (inventory.isEmpty() || !(inventory.get() instanceof ScreenHandlerFactory)) {
-            return;
-        }
+            // 检查是否是有效的容器
+            if (inventory.isEmpty() || !(inventory.get() instanceof ScreenHandlerFactory)) {
+                return;
+            }
 
-        // 检查是否是投影中的容器
-        Optional<LocalPlacementPos> placementPos = LocalPlacementPos.get(pos);
-        if (placementPos.isPresent()) {
-            // 是投影容器，设置为当前投影容器
+            // 检查是否是投影中的容器
+            Optional<LocalPlacementPos> placementPos = LocalPlacementPos.get(pos);
+            if (placementPos.isPresent()) {
+                // 是投影容器，设置为当前投影容器
 
-            //clearTempHighlightedBlocks();
-            BlockHighlighterRender.setCurrentProjectionContainer(pos);
-            getInstance().currentContainerPos = pos;
+                //clearTempHighlightedBlocks();
+                if (!BlockHighlighterRender.setCurrentProjectionContainer(pos)) {
+                    BlockHighlighterRender.addStorageContainer(pos);
+                    getInstance().currentContainerPos = pos;
+                }
+                //System.out.println(pos);
+                getInstance().currentContainerPos = pos;
 
-            // 获取投影容器需要的物品和当前物品，计算缺失的
-            //Optional<SimpleInventory> schematicInv = PlacementContainerAccess.getSchematicInventory(pos, state);
-            //if (schematicInv.isPresent()) {
-            //    List<ItemStack> missingItems = BlockHighlighterRender.findMissingItems(pos, schematicInv.get());
-            //    showMissingItemsHint(missingItems);
-            //}
-        } else {
-            // 不是投影容器，作为仓储容器处理
-            // 重复打开不会重复添加，只会刷新
-            BlockHighlighterRender.addStorageContainer(pos);
-            getInstance().currentContainerPos = pos;
+                // 获取投影容器需要的物品和当前物品，计算缺失的
+            /*Optional<SimpleInventory> schematicInv = PlacementContainerAccess.getSchematicInventory(pos, state);
+            if (schematicInv.isPresent()) {
+                List<ItemStack> missingItems = BlockHighlighterRender.findMissingItems(pos, schematicInv.get());
+                showMissingItemsHint(missingItems);
+            }*/
+            } else {
+                // 不是投影容器，作为仓储容器处理
+                // 重复打开不会重复添加，只会刷新
+                BlockHighlighterRender.addStorageContainer(pos);
+                getInstance().currentContainerPos = pos;
+            }
         }
     }
 
@@ -114,8 +121,8 @@ public class InventoryOverlay {
         }
     }
 
-    public BlockPos getCurrentContainerPos() {
-        return currentContainerPos;
+    public static BlockPos getCurrentContainerPos() {
+        return getInstance().currentContainerPos;
     }
 
     public static List<ItemStack> getCurrentMissingItems() {

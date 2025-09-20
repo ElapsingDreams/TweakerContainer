@@ -8,11 +8,16 @@ import net.minecraft.text.Text;
 import net.minecraft.util.ActionResult;
 import net.minecraft.util.Hand;
 import net.minecraft.util.hit.BlockHitResult;
+import net.minecraft.util.hit.HitResult;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.world.World;
 
 import java.util.ArrayDeque;
 import java.util.Queue;
+
+import static cn.envision.xihe.client.BlockHighlighterRender.isHoldingTriggerItem;
+import static cn.envision.xihe.client.BlockHighlighterRender.removeProjectContainer;
+import static cn.envision.xihe.client.config.HighlightConfig.getSW;
 
 public abstract class InteractionHandler {
     private static final Queue<InteractionHandler> queue = new ArrayDeque<>();
@@ -30,7 +35,7 @@ public abstract class InteractionHandler {
 
     private static ActionResult onBlockUse(PlayerEntity player, World world, Hand hand, BlockHitResult hitResult) {
         // 处理潜行右键清除标记
-        if (player.isSneaking() && hitResult.getType() == BlockHitResult.Type.BLOCK) {
+        if (player.isSneaking() && hitResult.getType() == BlockHitResult.Type.BLOCK && isHoldingTriggerItem() && getSW()) {
             BlockPos pos = hitResult.getBlockPos();
 
             // 清除单个标记
@@ -40,15 +45,26 @@ public abstract class InteractionHandler {
                         pos.getX(), pos.getY(), pos.getZ()), true);
                 return ActionResult.SUCCESS;
             }
-        } else if (player.isSneaking() && hitResult.getType() == BlockHitResult.Type.MISS) {
+            if(BlockHighlighterRender.getCurrentProjectionContainer() != null){
+                if (pos.getX() == BlockHighlighterRender.getCurrentProjectionContainer().getX() &&
+                        pos.getY() == BlockHighlighterRender.getCurrentProjectionContainer().getY() &&
+                        pos.getZ() == BlockHighlighterRender.getCurrentProjectionContainer().getZ()
+                    ) {
+                    removeProjectContainer();
+                    player.sendMessage(Text.translatable("xihe.message.removed_schem",
+                         pos.getX(), pos.getY(), pos.getZ()), true);
+                    return ActionResult.SUCCESS;
+                }
+            }
+        } /*else if (player.isSneaking() && hitResult.getType() == BlockHitResult.Type.MISS) {
             // 潜行右键空气清除所有标记
             BlockHighlighterRender.clearAll();
             player.sendMessage(Text.translatable("xihe.message.cleared_all"), true);
             return ActionResult.SUCCESS;
-        }
+        }*/
 
         // 处理容器点击 - 设置临时处理坐标
-        if (!player.isSneaking()) {
+        if (!player.isSneaking() && getSW()) {
             InventoryOverlay.onContainerClick(hitResult);
             // 新增：点击容器时设置临时处理坐标
             BlockHighlighterRender.setTempProcessingPos(hitResult.getBlockPos());

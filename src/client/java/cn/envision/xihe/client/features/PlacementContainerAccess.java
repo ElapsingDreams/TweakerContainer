@@ -25,6 +25,7 @@ import java.util.Optional;
  * Is this overcomplicated? Definitely.
  */
 public final class PlacementContainerAccess {
+    private static final SimpleInventory EMPTY_CHEST_INVENTORY = new SimpleInventory(27);
     public static LinkedStorageEntry getEntry(BlockPos worldPos, BlockState worldState) {
         return new LinkedStorageEntry(worldPos, null, getSchematicInventory(worldPos, worldState).orElse(null));
     }
@@ -48,8 +49,8 @@ public final class PlacementContainerAccess {
         Optional<SimpleInventory> opt2 = getSchematicInventoryInternal(adjacentChest, adjacentState);
         if (opt1.isEmpty() && opt2.isEmpty())
             return Optional.empty();
-        SimpleInventory chest1 = opt1.orElse(new SimpleInventory(27));
-        SimpleInventory chest2 = opt2.orElse(new SimpleInventory(27));
+        SimpleInventory chest1 = opt1.orElse(EMPTY_CHEST_INVENTORY);
+        SimpleInventory chest2 = opt2.orElse(EMPTY_CHEST_INVENTORY);
 
         return type == ChestType.RIGHT ? Optional.of(merge(chest1, chest2)) : Optional.of(merge(chest2, chest1));
     }

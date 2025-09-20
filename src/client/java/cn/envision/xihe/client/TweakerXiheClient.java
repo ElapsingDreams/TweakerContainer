@@ -20,6 +20,8 @@ import java.util.HashSet;
 import java.util.Set;
 
 import static cn.envision.xihe.client.BlockHighlighterRender.clearTempHighlightedBlocks;
+import static cn.envision.xihe.client.config.HighlightConfig.getSW;
+import static cn.envision.xihe.client.config.HighlightConfig.setSW;
 import static net.fabricmc.fabric.api.client.command.v2.ClientCommandManager.argument;
 import static net.fabricmc.fabric.api.client.command.v2.ClientCommandManager.literal;
 
@@ -46,12 +48,12 @@ public class TweakerXiheClient implements ClientModInitializer {
                                                 ClientWorld world = MinecraftClient.getInstance().world;
 
                                                 if (world != null && !world.isInBuildLimit(pos)) {
-                                                    context.getSource().sendError(Text.literal("该坐标超出世界范围！"));
+                                                    context.getSource().sendError(Text.literal("Out World Range！"));
                                                     return 0;
                                                 }
 
                                                 HIGHLIGHTED_BLOCKS.add(pos.toImmutable());
-                                                context.getSource().sendFeedback(Text.literal("已在位置 " + pos.toShortString() + " 添加高亮"));
+                                                context.getSource().sendFeedback(Text.literal("Set " + pos.toShortString() + "  Highlight"));
                                                 return 1;
                                             }))))
             // 新增：清除所有高亮
@@ -62,7 +64,27 @@ public class TweakerXiheClient implements ClientModInitializer {
                                 clearTempHighlightedBlocks();
                                 BlockHighlighterRender.clearAll();
 
-                                context.getSource().sendFeedback(Text.literal("已清除所有高亮标记"));
+                                context.getSource().sendFeedback(Text.literal("Clear All Highlight Block!"));
+                                return 1;
+                            })).
+                    then(literal("start")
+                            .executes(context -> {
+                                if (getSW()) {
+                                    context.getSource().sendError(Text.literal("Auto Highlight Block Started!"));
+                                    return 0;
+                                }
+                                setSW(true);
+                                context.getSource().sendFeedback(Text.literal("Starting Auto Highlight Block."));
+                                return 1;
+                            }))
+                    .then(literal("stop")
+                            .executes(context -> {
+                                if (!getSW()) {
+                                    context.getSource().sendError(Text.literal("Auto Highlight Block Stopped!"));
+                                    return 0;
+                                }
+                                setSW(false);
+                                context.getSource().sendFeedback(Text.literal("Stopping Auto Highlight Block."));
                                 return 1;
                             })));
 

@@ -1,18 +1,3 @@
-/time set day
-/setblock ~ ~ ~ minecraft:acacia_door
-/highlightblock -20
-/highlightblock -20 36 -87
-/highlightblock ~ ~ ~
-/highlightblock -21 37 -87
-/highlightblock ~ ~ ~
-/highlightblockbyitem
-/highlightblockmode solid
-/highlightblockmode wireframe
-/highlightblock -20.27 37.06 -86.06
-/highlightblock -20 30 22
-/highlightblock -21 37 -82
-/highlightblock 21 37 82
-/highlightblock 21 37 -82
 /highlightblock -21 37 -82
 /highlightblock -21 37 -87
 /highlightblockmode solid
@@ -41,3 +26,25 @@
 /highlightblock clear
 /time set day
 /highlightblock clear
+/reg awaawa
+/reg awaawa awaawa
+/highlightblock clear
+/time set day
+/highlightblock clear
+/time set day
+/highlightblock clear
+/reg awaawa awaawa
+/reg awawa awawa
+/time set day
+/time set night
+/time set day
+/highlightblock start
+/highlightblock stop
+/highlightblock start
+/highlightblock stop
+/highlightblock clear
+/highlightblock start
+/highlightblock stop
+/highlightblock start
+/highlightblock stop
+/highlightblock start

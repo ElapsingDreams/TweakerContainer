@@ -20,6 +20,10 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 import java.util.List;
 
+import static cn.envision.xihe.client.BlockHighlighterRender.getCurrentProjectionContainer;
+import static cn.envision.xihe.client.config.HighlightConfig.getSW;
+import static cn.envision.xihe.client.features.InventoryOverlay.getCurrentContainerPos;
+
 @Mixin(HandledScreen.class)
 public abstract class HandledScreenMixin<T extends ScreenHandler> {
 
@@ -40,45 +44,60 @@ public abstract class HandledScreenMixin<T extends ScreenHandler> {
         if (slot.inventory instanceof PlayerInventory) {
             return;
         }
+        if (!getSW()) return;
+        BlockPos clickedPos = BlockHighlighterRender.getAndClearTempProcessingPos();
+
+        BlockHighlighterRender.addSTORAGE_CONTAINER_CACHE(clickedPos, slot.inventory);
         List<ItemStack> missingItems = BlockHighlighterRender.getCurrentMissingItems();
         if (missingItems.isEmpty()) {
             return;
         }
-
         ItemStack currentStack = slot.getStack();
         if (currentStack.isEmpty()) {
             return;
         }
+        BlockPos currentProjectionContainer = getCurrentProjectionContainer();
+        BlockPos currentContainerPos = getCurrentContainerPos();
+        if(currentProjectionContainer != null && currentContainerPos != null) {
+            if (currentProjectionContainer.getX() == currentContainerPos.getX() &&
+                    currentProjectionContainer.getY() == currentContainerPos.getY() &&
+                    currentProjectionContainer.getZ() == currentContainerPos.getZ()
+            ) return;
 
-        boolean found = false;
-        for (ItemStack needed : missingItems) {
-            if (ItemStack.areItemsEqual(currentStack, needed)) {
-                drawFoundItemHighlight(context, slot);
-                found = true;
-                break;
+
+            boolean found = false;
+            for (ItemStack needed : missingItems) {
+                if (ItemStack.areItemsEqual(currentStack, needed)) {
+                    drawFoundItemHighlight(context, slot);
+                    found = true;
+                    break;
+                }
             }
         }
 
         // 关键修改：使用专门的临时处理坐标，读取后自动清空
-        BlockPos clickedPos = BlockHighlighterRender.getAndClearTempProcessingPos();
+
 
         // 如果获取到了有效的临时处理坐标，则进行处理
-        if (clickedPos != null && !clickedPos.equals(BlockPos.ORIGIN)) {
-            if (found) {
-                if (!BlockHighlighterRender.getTempHighlightedBlocks().contains(clickedPos)) {
-                    BlockHighlighterRender.addTempHighlightedBlock(clickedPos);
-                }
-            } else {
-                BlockHighlighterRender.getTempHighlightedBlocks().remove(clickedPos);
-            }
-        }
+        //if (clickedPos != null && !clickedPos.equals(BlockPos.ORIGIN)) {
+        //    if (found) {
+        //        if (!BlockHighlighterRender.getTempHighlightedBlocks().contains(clickedPos)) {
+        //            BlockHighlighterRender.addTempHighlightedBlock(clickedPos);
+        //        }
+        //    } else {
+        //        BlockHighlighterRender.getTempHighlightedBlocks().remove(clickedPos);
+        //    }
+        //}
     }
 
     @Unique
     private void drawFoundItemHighlight(DrawContext context, Slot slot) {
+
         int slotSize = 16;
-        int x = slot.x;
-        int y = slot.y;
-        context.fill(x - 1, y - 1, x + slotSize + 1, y + slotSize + 1, 0x8000FF00);
+        int x = slot.x + 1;
+        int y = slot.y + 1;
+        //context.fill(x - 1, y - 1, x + slotSize + 1, y + slotSize/8 + 1, 0xA00000FF);
+        //context.fill(x - 1, y - 1, x + slotSize/8 + 1, y + slotSize + 1, 0xA00000FF);
+        context.fill(x,  y, x + slotSize/4, y + slotSize/4, 0xFAFF0000);
     }
 }
