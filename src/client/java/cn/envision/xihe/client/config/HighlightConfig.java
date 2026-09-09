@@ -75,6 +75,6 @@ public class HighlightConfig {
     }
 
     private static class ConfigData {
-        String triggerItem = "minecraft:shulker_box";
+        String triggerItem = "minecraft:shulker_shell";
     }
 }

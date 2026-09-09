@@ -20,8 +20,10 @@ import net.minecraft.client.network.ClientPlayNetworkHandler;
 import net.minecraft.client.render.*;
 import net.minecraft.client.util.math.MatrixStack;
 import net.minecraft.client.world.ClientWorld;
+import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.inventory.Inventory;
 import net.minecraft.inventory.SimpleInventory;
+import net.minecraft.item.Item;
 import net.minecraft.item.ItemStack;
 import net.minecraft.util.Identifier;
 import net.minecraft.util.math.BlockPos;
@@ -39,6 +41,7 @@ import static cn.envision.xihe.client.config.HighlightConfig.getSW;
 import static cn.envision.xihe.client.config.HighlightConfig.setSW;
 
 public class BlockHighlighterRender {
+    private static Map<Item, Integer> remainingNeeded = new HashMap<>();
     // 基础常量
     private static final Set<BlockPos> TEMP_HIGHLIGHTED_BLOCKS = new HashSet<>();
     private static final Set<BlockPos> HIGHLIGHTED_BLOCKS = new HashSet<>();
@@ -67,6 +70,9 @@ public class BlockHighlighterRender {
     }
 
 
+    public static Map<Item, Integer> getRemainingNeeded() {
+        return remainingNeeded;
+    }
 
     public static void addSTORAGE_CONTAINER_CACHE(BlockPos pos, Inventory inv){
             STORAGE_CONTAINER_CACHE.put(pos, inv);
@@ -75,49 +81,77 @@ public class BlockHighlighterRender {
     public static void setTempProcessingPos(BlockPos pos) {
         tempProcessingPos = pos != null ? pos.toImmutable() : null;
     }
-    public static void updateMatchingStorageContainers() {
-        // 清空现有匹配列表
-        MATCHING_STORAGE_CONTAINERS.clear();
+    // BlockHighlighterRender.java
 
-        // 若没有投影容器或没有缺失物品，直接返回
-        if (currentProjectionContainer == null || currentMissingItems.isEmpty()) {
+    public static void updateMatchingStorageContainers() {
+        MATCHING_STORAGE_CONTAINERS.clear();
+        remainingNeeded.clear();
+        if (currentProjectionContainer == null || currentMissingItems.isEmpty()) return;
+
+        // 1. 先统计玩家背包里已有的物品数量
+        PlayerEntity player = MinecraftClient.getInstance().player;
+        Map<Item, Integer> playerInventoryCount = new HashMap<>();
+        if (player != null) {
+            for (int i = 0; i < player.getInventory().size(); i++) {
+                ItemStack stack = player.getInventory().getStack(i);
+                if (!stack.isEmpty()) {
+                    playerInventoryCount.merge(stack.getItem(), stack.getCount(), Integer::sum);
+                }
+            }
+        }
+
+        // 2. 统计投影容器里已有的物品数量
+        Map<Item, Integer> projectionContainerCount = new HashMap<>();
+        Inventory projectionInv = STORAGE_CONTAINER_CACHE.get(currentProjectionContainer);
+        if (projectionInv != null) {
+            for (int i = 0; i < projectionInv.size(); i++) {
+                ItemStack stack = projectionInv.getStack(i);
+                if (!stack.isEmpty()) {
+                    projectionContainerCount.merge(stack.getItem(), stack.getCount(), Integer::sum);
+                }
+            }
+        }
+
+        // 3. 计算扣除背包和投影容器后，每种物品还缺多少
+        //Map<Item, Integer> remainingNeeded = new HashMap<>();
+        for (ItemStack missing : currentMissingItems) {
+            int needed = missing.getCount();
+            int haveInPlayer = playerInventoryCount.getOrDefault(missing.getItem(), 0);
+            int haveInProjection = projectionContainerCount.getOrDefault(missing.getItem(), 0);
+
+            // 核心修改：从总需求中减去玩家背包和投影容器里已有的数量
+            int remaining = needed - haveInPlayer - haveInProjection;
+
+            if (remaining > 0) {
+                remainingNeeded.put(missing.getItem(), remaining);
+            }
+        }
+
+        // 4. 如果背包和投影容器加起来已经全部满足，直接返回，不高亮任何仓储箱
+        if (remainingNeeded.isEmpty()) {
             return;
         }
 
-        // 遍历所有存储容器，检查是否包含任意缺失物品
+        // 5. 检查仓储箱，只高亮包含"仍然缺少"物品的仓储箱
         for (BlockPos storagePos : STORAGE_CONTAINERS) {
             Inventory storageInv = STORAGE_CONTAINER_CACHE.get(storagePos);
-            if (storageInv == null) {
-                continue; // 跳过未缓存的存储容器
-            }
+            if (storageInv == null) continue;
 
-            // 检查该存储容器是否包含任意缺失物品
             boolean hasMatchingItem = false;
             for (int i = 0; i < storageInv.size(); i++) {
                 ItemStack storedStack = storageInv.getStack(i);
-                if (storedStack.isEmpty()) {
-                    continue;
-                }
-
-                // 与投影仓库的缺失物品对比
-                for (ItemStack missingStack : currentMissingItems) {
-                    if (ItemStack.areItemsEqual(storedStack, missingStack)) {
-                        hasMatchingItem = true;
-                        break; // 找到一个匹配即可
-                    }
-                }
-                if (hasMatchingItem) {
+                if (!storedStack.isEmpty() && remainingNeeded.containsKey(storedStack.getItem())) {
+                    hasMatchingItem = true;
                     break;
                 }
             }
 
-            // 若包含匹配物品，加入黄色高亮列表
-            BlockPos pos = storagePos.toImmutable();
             if (hasMatchingItem) {
-                    MATCHING_STORAGE_CONTAINERS.add(pos);
+                MATCHING_STORAGE_CONTAINERS.add(storagePos);
             }
         }
     }
+
     // 新增：获取并清空临时处理坐标（读取后自动清除）
     public static BlockPos getAndClearTempProcessingPos() {
         BlockPos pos = tempProcessingPos;
@@ -144,7 +178,7 @@ public class BlockHighlighterRender {
             //LOGGER.warn("{} 尝试设置空的投影容器，操作忽略", MOD_TAG);
         }
 
-        BlockPos immutableNewPos = newPos.toImmutable();
+        BlockPos immutableNewPos = newPos;
         World world = MinecraftClient.getInstance().world;
         if (world == null) return true;
         // 原则上弃用，非servux等协议获取，此处纯作为虚拟方块，缺的方块默认成全部了，能用就行)
@@ -160,21 +194,31 @@ public class BlockHighlighterRender {
             HIGHLIGHTED_BLOCKS.remove(currentProjectionContainer);
         }
         currentProjectionContainer = immutableNewPos;
-        HIGHLIGHTED_BLOCKS.add(immutableNewPos);
+        HIGHLIGHTED_BLOCKS.add(immutableNewPos.toImmutable());
         //LOGGER.info("{} 已设置投影容器：{}", MOD_TAG, immutableNewPos.toShortString());
         //logInventoryContent("投影容器", immutableNewPos, schematicInv.get());
 
         // 重新计算缺失物品
         currentMissingItems.clear();
         //currentMissingItems.addAll(findMissingItems(immutableNewPos, schematicInv.get()));
-        Inventory inventory = schematicInv.get();
+        /*Inventory inventory = schematicInv.get();
         List<ItemStack> missing = new ArrayList<>();
         for (int i = 0; i < inventory.size(); i++) {
             ItemStack stack = inventory.getStack(i);
             if (!currentMissingItems.contains(stack))
                 missing.add(stack);
         }
-        currentMissingItems.addAll(missing);
+        currentMissingItems.addAll(missing);*/
+
+        // 安全方法
+        Inventory inventory = schematicInv.get();
+        for (int i = 0; i < inventory.size(); i++) {
+            ItemStack stack = inventory.getStack(i);
+            if (!stack.isEmpty()) {
+                currentMissingItems.add(stack.copy()); // 使用 copy() 是个好习惯
+            }
+        }
+
         updateMatchingStorageContainers();
         return true;
     }
@@ -561,4 +605,44 @@ public class BlockHighlighterRender {
     }
 
 
+    public static void checkAndRemoveSatisfiedContainer(BlockPos storagePos) {
+        if (storagePos == null || currentProjectionContainer == null || currentMissingItems.isEmpty()) {
+            return;
+        }
+
+        BlockPos immutableStoragePos = storagePos.toImmutable();
+        Inventory storageInv = STORAGE_CONTAINER_CACHE.get(immutableStoragePos);
+        if (storageInv == null) {
+            return;
+        }
+
+        // 遍历所有缺失的物品，检查这个仓储容器是否已经满足了所有需求
+        boolean isFullySatisfied = true;
+        for (ItemStack missingStack : currentMissingItems) {
+            int neededCount = missingStack.getCount();
+            int foundCount = 0;
+
+            // 计算这个仓储容器里有多少我们需要的物品
+            for (int i = 0; i < storageInv.size(); i++) {
+                ItemStack storedStack = storageInv.getStack(i);
+                if (ItemStack.areItemsEqual(storedStack, missingStack)) {
+                    foundCount += storedStack.getCount();
+                }
+            }
+
+            // 如果这个仓储容器里的数量不够，说明还没满足
+            if (foundCount < neededCount) {
+                isFullySatisfied = false;
+                break;
+            }
+        }
+
+        // 只有当这个仓储箱里的物品完全满足了投影需求时，才从仓储区名单中移除它
+        if (isFullySatisfied) {
+            STORAGE_CONTAINERS.remove(immutableStoragePos);
+            STORAGE_CONTAINER_CACHE.remove(immutableStoragePos);
+            updateMatchingStorageContainers(); // 重新计算匹配，刷新高亮
+            // LOGGER.info("{} 仓储容器[{}]物品已齐全，已移除高亮", MOD_TAG, immutableStoragePos.toShortString());
+        }
+    }
 }

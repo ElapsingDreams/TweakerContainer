@@ -8,15 +8,13 @@ import net.minecraft.text.Text;
 import net.minecraft.util.ActionResult;
 import net.minecraft.util.Hand;
 import net.minecraft.util.hit.BlockHitResult;
-import net.minecraft.util.hit.HitResult;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.world.World;
 
 import java.util.ArrayDeque;
 import java.util.Queue;
 
-import static cn.envision.xihe.client.BlockHighlighterRender.isHoldingTriggerItem;
-import static cn.envision.xihe.client.BlockHighlighterRender.removeProjectContainer;
+import static cn.envision.xihe.client.BlockHighlighterRender.*;
 import static cn.envision.xihe.client.config.HighlightConfig.getSW;
 
 public abstract class InteractionHandler {
@@ -34,6 +32,10 @@ public abstract class InteractionHandler {
     }
 
     private static ActionResult onBlockUse(PlayerEntity player, World world, Hand hand, BlockHitResult hitResult) {
+        if (!world.isClient) {
+            return ActionResult.PASS;
+        }
+
         // 处理潜行右键清除标记
         if (player.isSneaking() && hitResult.getType() == BlockHitResult.Type.BLOCK && isHoldingTriggerItem() && getSW()) {
             BlockPos pos = hitResult.getBlockPos();
@@ -46,10 +48,11 @@ public abstract class InteractionHandler {
                 return ActionResult.SUCCESS;
             }
             if(BlockHighlighterRender.getCurrentProjectionContainer() != null){
-                if (pos.getX() == BlockHighlighterRender.getCurrentProjectionContainer().getX() &&
-                        pos.getY() == BlockHighlighterRender.getCurrentProjectionContainer().getY() &&
-                        pos.getZ() == BlockHighlighterRender.getCurrentProjectionContainer().getZ()
-                    ) {
+                System.out.println(pos);
+                System.out.println(BlockHighlighterRender.getCurrentProjectionContainer());
+                if (pos == BlockHighlighterRender.getCurrentProjectionContainer()) {
+
+
                     removeProjectContainer();
                     player.sendMessage(Text.translatable("xihe.message.removed_schem",
                          pos.getX(), pos.getY(), pos.getZ()), true);
@@ -68,6 +71,7 @@ public abstract class InteractionHandler {
             InventoryOverlay.onContainerClick(hitResult);
             // 新增：点击容器时设置临时处理坐标
             BlockHighlighterRender.setTempProcessingPos(hitResult.getBlockPos());
+            BlockHighlighterRender.checkAndRemoveSatisfiedContainer(hitResult.getBlockPos());
         }
 
         return ActionResult.PASS;

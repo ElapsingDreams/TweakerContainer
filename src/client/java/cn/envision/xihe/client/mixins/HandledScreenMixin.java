@@ -55,6 +55,7 @@ public abstract class HandledScreenMixin<T extends ScreenHandler> {
             return;
         }
         if (!getSW()) return;
+        BlockHighlighterRender.updateMatchingStorageContainers();
         BlockPos clickedPos = BlockHighlighterRender.getAndClearTempProcessingPos();
 
         BlockHighlighterRender.addSTORAGE_CONTAINER_CACHE(clickedPos, slot.inventory);
@@ -78,7 +79,9 @@ public abstract class HandledScreenMixin<T extends ScreenHandler> {
             boolean found = false;
             for (ItemStack needed : missingItems) {
                 if (ItemStack.areItemsEqual(currentStack, needed)) {
-                    drawFoundItemHighlight(context, slot);
+                    if (BlockHighlighterRender.getRemainingNeeded().getOrDefault(currentStack.getItem(), 0) > 0) {
+                        drawFoundItemHighlight(context, slot);
+                    }
                     found = true;
                     break;
                 }
