@@ -21,6 +21,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import java.util.List;
 
 import static cn.envision.xihe.client.BlockHighlighterRender.getCurrentProjectionContainer;
+import static cn.envision.xihe.client.BlockHighlighterRender.updateMatchingStorageContainers;
 import static cn.envision.xihe.client.config.HighlightConfig.getSW;
 import static cn.envision.xihe.client.features.InventoryOverlay.getCurrentContainerPos;
 
@@ -32,6 +33,15 @@ public abstract class HandledScreenMixin<T extends ScreenHandler> {
 
     public HandledScreenMixin(T handler, Text title) {
         super();
+    }
+
+    @Inject(method = "close",
+        at = @At("RETURN"),
+        cancellable = false
+    )
+    private void onClose(CallbackInfo ci){
+        if (!getSW()) return;
+        updateMatchingStorageContainers();
     }
 
 
@@ -96,8 +106,8 @@ public abstract class HandledScreenMixin<T extends ScreenHandler> {
         int slotSize = 16;
         int x = slot.x + 1;
         int y = slot.y + 1;
-        //context.fill(x - 1, y - 1, x + slotSize + 1, y + slotSize/8 + 1, 0xA00000FF);
+        context.fill(x - 1, y - 1, x + slotSize - 1, y + slotSize - 1, 0x6000FF00);
         //context.fill(x - 1, y - 1, x + slotSize/8 + 1, y + slotSize + 1, 0xA00000FF);
-        context.fill(x,  y, x + slotSize/4, y + slotSize/4, 0xFAFF0000);
+        //context.fill(x,  y, x + slotSize/4, y + slotSize/4, 0xFAFF0000);
     }
 }

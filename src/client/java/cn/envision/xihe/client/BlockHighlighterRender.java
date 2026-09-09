@@ -69,14 +69,13 @@ public class BlockHighlighterRender {
 
 
     public static void addSTORAGE_CONTAINER_CACHE(BlockPos pos, Inventory inv){
-        if(!STORAGE_CONTAINER_CACHE.containsKey(pos))
             STORAGE_CONTAINER_CACHE.put(pos, inv);
     }
     // 新增：设置临时处理坐标
     public static void setTempProcessingPos(BlockPos pos) {
         tempProcessingPos = pos != null ? pos.toImmutable() : null;
     }
-    private static void updateMatchingStorageContainers() {
+    public static void updateMatchingStorageContainers() {
         // 清空现有匹配列表
         MATCHING_STORAGE_CONTAINERS.clear();
 
