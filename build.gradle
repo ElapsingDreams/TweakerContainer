@@ -1,5 +1,5 @@
 plugins {
-    id 'fabric-loom' version '1.11.4'
+    id 'fabric-loom' version '1.15.3'
     id 'maven-publish'
 }
 
@@ -34,12 +34,11 @@ repositories {
     // Loom adds the essential maven repositories to download Minecraft and libraries from automatically.
     // See https://docs.gradle.org/current/userguide/declaring_repositories.html
     // for more information about repositories.
+    mavenCentral()
+    maven { url 'https://jitpack.io/' }
+    maven { url 'https://api.modrinth.com/maven/' }
     maven { url = 'https://maven.fabricmc.net/' }
-    maven { url = 'https://masa.dy.fi/maven' } // Litematica & malilib
-    maven {
-        name = "JitPack"
-        url = "https://jitpack.io"
-    }
+    maven { url = 'https://masa.dy.fi/maven' } // Litematica & malilib old
 }
 
 dependencies {
@@ -50,8 +49,13 @@ dependencies {
 
     modImplementation include("com.github.Chocohead:Fabric-ASM:v${project.fabric_asm_version}")
     modImplementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_api_version}"
-    modImplementation("com.github.sakura-ryoko:malilib:${project.malilib_version}")
-    modImplementation("com.github.sakura-ryoko:litematica:${project.litematica_version}")
+    //modImplementation("com.github.sakura-ryoko:malilib:${project.malilib_version}")
+    //modImplementation("com.github.sakura-ryoko:litematica:${project.litematica_version}")
+    modImplementation(files("libs/malilib-fabric-${project.malilib_lib_version}.jar"))
+    modImplementation(files("libs/litematica-fabric-${project.litematica_lib_version}.jar"))
+    modImplementation(files("libs/litematica-fabric-${project.litematica_lib_version}.jar"))
+    modImplementation(files("libs/techutils-${project.techutils_lib_version}.jar"))
+
 }
 
 processResources {
@@ -61,6 +65,7 @@ processResources {
     inputs.property "loader_version", project.loader_version
     inputs.property "malilib_dependency", project.malilib_dependency
     inputs.property "litematica_dependency", project.litematica_dependency
+    inputs.property "techutils_dependency", project.techutils_dependency
     filteringCharset "UTF-8"
 
     filesMatching("fabric.mod.json") {
@@ -69,7 +74,8 @@ processResources {
                 "minecraft_dependency"	: project.minecraft_dependency,
                 "loader_version": project.loader_version,
                 "malilib_dependency"	: project.malilib_dependency,
-                "litematica_dependency"	: project.litematica_dependency
+                "litematica_dependency"	: project.litematica_dependency,
+                "techutils_dependency"	: project.techutils_dependency
     }
 }
 
