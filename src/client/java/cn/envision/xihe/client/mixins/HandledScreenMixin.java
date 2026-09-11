@@ -31,11 +31,14 @@ import static cn.envision.xihe.client.config.HighlightConfig.isEnabled;
  */
 @Mixin(HandledScreen.class)
 public abstract class HandledScreenMixin<T extends ScreenHandler> {
-    // 每帧记录已显示过数量的需求键，用于“同种物品只在第一个匹配格子显示”
+    // 每帧记录已标注过的需求键，用于“同种物品只标第一个匹配格子”
     @Unique
     private Set<HighlightState.StackKey> xiheShownPutKeys;
     @Unique
     private Set<HighlightState.StackKey> xiheShownTakeKeys;
+    // 当前槽位是否要写数量，由 HEAD 阶段的高亮判定顺带给出
+    @Unique
+    private boolean xiheShowCount;
 
     @Inject(method = "close",
         at = @At("RETURN"),
@@ -98,19 +101,17 @@ public abstract class HandledScreenMixin<T extends ScreenHandler> {
             cancellable = false
     )
     private void onDrawSlotCount(DrawContext context, Slot slot, CallbackInfo ci) {
-        if (!isEnabled()) return;
+        if (!isEnabled() || !xiheShowCount) return;
 
         ItemStack stack = slot.getStack();
         if (stack.isEmpty()) return;
 
         // 需求总量：一个物品需要多少就写多少，不按格子数量分摊或封顶
-        int needed = getNeededAmount(HighlightState.get(), slot);
+        HighlightState state = HighlightState.get();
+        int needed = slot.inventory instanceof PlayerInventory
+                ? state.getProjectionMissing(stack)
+                : state.getRemainingNeeded(stack);
         if (needed <= 0) return;
-
-        // 同种物品是否只在第一个匹配到的格子显示
-        if (HighlightConfig.isCountOnlyFirstMatch() && !markCountShown(slot)) {
-            return;
-        }
 
         // 以槽位左上角为锚点，右/下偏移与字号都由配置决定；避开原版画在右下角的堆叠数量
         Matrix3x2fStack matrices = context.getMatrices();
@@ -125,20 +126,56 @@ public abstract class HandledScreenMixin<T extends ScreenHandler> {
     }
 
     /**
-     * 记录该需求键已经显示过数量。
+     * 背景与数量共用同一套判定：
+     * 同一种物品在开启“只标第一个匹配格子”时只标第一个，其余格子背景和数量都不画。
      *
-     * @return 首次出现返回 true，之后返回 false
+     * @return 需要高亮时的背景色，0 表示不需要
      */
     @Unique
-    private boolean markCountShown(Slot slot) {
-        HighlightState.StackKey key = HighlightState.requirementKey(slot.getStack());
+    private int getHighlightColor(HighlightState state, Slot slot) {
+        xiheShowCount = false;
+
+        ItemStack stack = slot.getStack();
+        if (stack.isEmpty() || !isHintSide(state, slot)) {
+            return 0;
+        }
+
+        boolean playerSlot = slot.inventory instanceof PlayerInventory;
+        int needed = playerSlot ? state.getProjectionMissing(stack) : state.getRemainingNeeded(stack);
+
+        if (needed > 0) {
+            if (!isFirstMatchSlot(stack, playerSlot)) {
+                return 0;
+            }
+            xiheShowCount = true;
+            return playerSlot ? HighlightConfig.getSlotPutColor() : HighlightConfig.getSlotTakeColor();
+        }
+
+        // 严格校验时，物品相同但 NBT 不同的槽位换一种颜色提示，同样只标第一个匹配格子
+        if (HighlightConfig.isNbtMismatchColor()
+                && state.hasComponentMismatch(stack, playerSlot)
+                && isFirstMatchSlot(stack, playerSlot)) {
+            return HighlightConfig.getSlotNbtMismatchColor();
+        }
+
+        return 0;
+    }
+
+    /**
+     * 该槽位是否是同一需求键第一个被绘制的格子；关闭“只标第一个”时恒为 true。
+     */
+    @Unique
+    private boolean isFirstMatchSlot(ItemStack stack, boolean playerSlot) {
+        if (!HighlightConfig.isCountOnlyFirstMatch()) {
+            return true;
+        }
+
+        HighlightState.StackKey key = HighlightState.requirementKey(stack);
         if (key == null) {
             return true;
         }
 
-        Set<HighlightState.StackKey> shown = slot.inventory instanceof PlayerInventory
-                ? shownPutKeys()
-                : shownTakeKeys();
+        Set<HighlightState.StackKey> shown = playerSlot ? shownPutKeys() : shownTakeKeys();
         return shown.add(key);
     }
 
@@ -156,48 +193,6 @@ public abstract class HandledScreenMixin<T extends ScreenHandler> {
             xiheShownTakeKeys = new HashSet<>();
         }
         return xiheShownTakeKeys;
-    }
-
-    /**
-     * @return 需要高亮时的背景色，0 表示不需要
-     */
-    @Unique
-    private int getHighlightColor(HighlightState state, Slot slot) {
-        boolean playerSlot = slot.inventory instanceof PlayerInventory;
-
-        if (getNeededAmount(state, slot) > 0) {
-            return playerSlot ? HighlightConfig.getSlotPutColor() : HighlightConfig.getSlotTakeColor();
-        }
-
-        // 严格校验时，物品相同但 NBT 不同的槽位换一种颜色提示
-        if (!HighlightConfig.isNbtMismatchColor()) {
-            return 0;
-        }
-
-        ItemStack stack = slot.getStack();
-        if (stack.isEmpty() || !isHintSide(state, slot)) {
-            return 0;
-        }
-
-        return state.hasComponentMismatch(stack, playerSlot)
-                ? HighlightConfig.getSlotNbtMismatchColor()
-                : 0;
-    }
-
-    /**
-     * 该槽位还要处理多少个物品，0 表示不用管。
-     */
-    @Unique
-    private int getNeededAmount(HighlightState state, Slot slot) {
-        ItemStack stack = slot.getStack();
-        if (stack.isEmpty() || !isHintSide(state, slot)) {
-            return 0;
-        }
-
-        // 背包侧看投影容器还缺多少，容器侧看还要去仓储取多少
-        return slot.inventory instanceof PlayerInventory
-                ? state.getProjectionMissing(stack)
-                : state.getRemainingNeeded(stack);
     }
 
     /**

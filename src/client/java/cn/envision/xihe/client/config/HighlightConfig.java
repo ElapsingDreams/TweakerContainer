@@ -56,7 +56,7 @@ public class HighlightConfig implements IConfigHandler {
         public static final ConfigBoolean NBT_MISMATCH_COLOR = new ConfigBoolean("nbtMismatchColor", true,
                 "严格校验时，物品相同但 NBT 不同的槽位换一种背景色提示");
         public static final ConfigBoolean COUNT_ONLY_FIRST_MATCH = new ConfigBoolean("countOnlyFirstMatch", true,
-                "同一种物品只在第一个匹配到的格子显示数量，其余格子只标背景；关闭则每个格子都显示");
+                "同一种物品只标注第一个匹配到的格子（背景与数量都不画），其余格子保持原样；关闭则每个格子都标");
         public static final ConfigBoolean HINT_IN_PLAYER_INVENTORY = new ConfigBoolean("hintInPlayerInventory", false,
                 "在玩家背包界面也显示投影容器的缺货提示");
         public static final ConfigInteger HINT_TEXT_OFFSET_X = new ConfigInteger("hintTextOffsetX", 2, 0, 16,
