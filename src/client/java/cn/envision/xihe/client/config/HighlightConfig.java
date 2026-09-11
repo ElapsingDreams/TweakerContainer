@@ -59,6 +59,10 @@ public class HighlightConfig implements IConfigHandler {
                 "嵌套读取容器内容：箱子或背包里的潜影盒、收纳袋也算作可用物品（最多两层）");
         public static final ConfigBoolean COUNT_ONLY_FIRST_MATCH = new ConfigBoolean("countOnlyFirstMatch", true,
                 "同一种物品只标注第一个匹配到的格子（背景与数量都不画），其余格子保持原样；关闭则每个格子都标");
+        public static final ConfigBoolean SPREAD_COUNT_BY_STACK_SIZE = new ConfigBoolean("spreadCountByStackSize", false,
+                "按物品最大堆叠数逐个格子标注到够为止；关闭则只在首个匹配格子标出全部需要数量");
+        public static final ConfigBoolean SPREAD_COUNT_FOR_NON_STACKABLE = new ConfigBoolean("spreadCountForNonStackable", false,
+                "不可堆叠物品是否也逐个格子标注；默认关闭，由一个格子标出全部需要数量");
         public static final ConfigBoolean HINT_IN_PLAYER_INVENTORY = new ConfigBoolean("hintInPlayerInventory", false,
                 "在玩家背包界面也显示投影容器的缺货提示");
         public static final ConfigInteger HINT_TEXT_OFFSET_X = new ConfigInteger("hintTextOffsetX", 2, 0, 16,
@@ -78,6 +82,8 @@ public class HighlightConfig implements IConfigHandler {
                 NBT_MISMATCH_COLOR,
                 READ_NESTED_CONTAINERS,
                 COUNT_ONLY_FIRST_MATCH,
+                SPREAD_COUNT_BY_STACK_SIZE,
+                SPREAD_COUNT_FOR_NON_STACKABLE,
                 HINT_IN_PLAYER_INVENTORY,
                 HINT_TEXT_OFFSET_X,
                 HINT_TEXT_OFFSET_Y,
@@ -147,6 +153,14 @@ public class HighlightConfig implements IConfigHandler {
 
     public static boolean isReadNestedContainers() {
         return Generic.READ_NESTED_CONTAINERS.getBooleanValue();
+    }
+
+    public static boolean isSpreadCountByStackSize() {
+        return Generic.SPREAD_COUNT_BY_STACK_SIZE.getBooleanValue();
+    }
+
+    public static boolean isSpreadCountForNonStackable() {
+        return Generic.SPREAD_COUNT_FOR_NON_STACKABLE.getBooleanValue();
     }
 
     public static boolean isHintInPlayerInventory() {

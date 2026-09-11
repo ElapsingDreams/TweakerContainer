@@ -21,7 +21,9 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Map;
 import java.util.Set;
 
 import static cn.envision.xihe.client.config.HighlightConfig.isEnabled;
@@ -40,6 +42,14 @@ public abstract class HandledScreenMixin<T extends ScreenHandler> {
     // 已抓取内容的界面 syncId，避免 init 因窗口尺寸变化而重复抓取
     @Unique
     private Integer xiheCapturedSyncId;
+    // 本槽位要标注的数量（HEAD 阶段定下，RETURN 阶段写出来）
+    @Unique
+    private int xiheLabelAmount;
+    // 按堆叠数逐个标注时，每个需求键还剩多少没标完
+    @Unique
+    private Map<ItemType, Integer> xihePutLabelRemaining;
+    @Unique
+    private Map<ItemType, Integer> xiheTakeLabelRemaining;
     @Unique
     private Set<ItemType> xiheShownTakeKeys;
     // 当前槽位是否要写数量，由 HEAD 阶段的高亮判定顺带给出
@@ -126,6 +136,12 @@ public abstract class HandledScreenMixin<T extends ScreenHandler> {
         if (xiheShownTakeKeys != null) {
             xiheShownTakeKeys.clear();
         }
+        if (xihePutLabelRemaining != null) {
+            xihePutLabelRemaining.clear();
+        }
+        if (xiheTakeLabelRemaining != null) {
+            xiheTakeLabelRemaining.clear();
+        }
     }
 
 
@@ -155,11 +171,7 @@ public abstract class HandledScreenMixin<T extends ScreenHandler> {
         if (!isEnabled() || !xiheShowCount) return;
 
         ItemStack stack = slot.getStack();
-        if (stack.isEmpty()) return;
-
-        // 需求总量：一个物品需要多少就写多少，不按格子数量分摊或封顶
-        HighlightState.SlotNeed need = getSlotNeed(HighlightState.get(), slot);
-        if (need == null) return;
+        if (stack.isEmpty() || xiheLabelAmount <= 0) return;
 
         // 以槽位左上角为锚点，右/下偏移与字号都由配置决定；避开原版画在右下角的堆叠数量
         Matrix3x2fStack matrices = context.getMatrices();
@@ -169,7 +181,7 @@ public abstract class HandledScreenMixin<T extends ScreenHandler> {
         float scale = HighlightConfig.getHintTextScale();
         matrices.scale(scale, scale);
         context.drawText(MinecraftClient.getInstance().textRenderer,
-                Integer.toString(need.amount()), 0, 0, HighlightConfig.getSlotCountTextColor(), true);
+                Integer.toString(xiheLabelAmount), 0, 0, HighlightConfig.getSlotCountTextColor(), true);
         matrices.popMatrix();
     }
 
@@ -182,6 +194,7 @@ public abstract class HandledScreenMixin<T extends ScreenHandler> {
     @Unique
     private int getHighlightColor(HighlightState state, Slot slot) {
         xiheShowCount = false;
+        xiheLabelAmount = 0;
 
         ItemStack stack = slot.getStack();
         if (stack.isEmpty() || !isHintSide(state, slot)) {
@@ -189,16 +202,29 @@ public abstract class HandledScreenMixin<T extends ScreenHandler> {
         }
 
         boolean playerSlot = slot.inventory instanceof PlayerInventory;
+        int color = playerSlot ? HighlightConfig.getSlotPutColor() : HighlightConfig.getSlotTakeColor();
 
-        // 自身或内部容器内容命中需求时标色，数量用该需求的总量
+        // 自身或内部容器内容命中需求时标色
         HighlightState.SlotNeed need = state.matchSlot(stack, playerSlot);
         if (need != null) {
+            // 按最大堆叠数逐个格子标注到够为止（容器格子不参与，只在盒子上标色）
+            if (!need.nested() && useSpreadCount(stack)) {
+                int label = nextLabelAmount(need, playerSlot, stack);
+                if (label <= 0) {
+                    return 0; // 这种物品已经标够
+                }
+                xiheShowCount = true;
+                xiheLabelAmount = label;
+                return color;
+            }
+
             if (!isFirstMatchSlot(need.key(), playerSlot)) {
                 return 0;
             }
             // 容器格子（潜影盒、收纳袋）只标色，不在盒子上写它内部物品的数量
             xiheShowCount = !need.nested();
-            return playerSlot ? HighlightConfig.getSlotPutColor() : HighlightConfig.getSlotTakeColor();
+            xiheLabelAmount = need.amount();
+            return color;
         }
 
         // 严格校验时，物品相同但 NBT 不同的槽位换一种颜色提示，同样只标第一个匹配格子
@@ -211,18 +237,47 @@ public abstract class HandledScreenMixin<T extends ScreenHandler> {
         return 0;
     }
 
+    /** 按最大堆叠数逐个标注时，不可堆叠物品默认仍由一个格子标出全部需要数量。 */
+    @Unique
+    private static boolean useSpreadCount(ItemStack stack) {
+        if (!HighlightConfig.isSpreadCountByStackSize()) {
+            return false;
+        }
+        return stack.getMaxCount() > 1 || HighlightConfig.isSpreadCountForNonStackable();
+    }
+
     /**
-     * 该槽位匹配到的需求（含容器内部内容），没有则返回 null。
+     * 取出本格要标注的数量：最多一个堆叠，剩下的由后面的匹配格子接着标。
+     *
+     * @return 0 表示这种物品已经标够，本格不再标注
      */
     @Unique
-    private HighlightState.SlotNeed getSlotNeed(HighlightState state, Slot slot) {
-        ItemStack stack = slot.getStack();
-        if (stack.isEmpty() || !isHintSide(state, slot)) {
-            return null;
+    private int nextLabelAmount(HighlightState.SlotNeed need, boolean playerSlot, ItemStack stack) {
+        Map<ItemType, Integer> remaining = playerSlot ? putLabelRemaining() : takeLabelRemaining();
+        int left = remaining.computeIfAbsent(need.key(), key -> need.amount());
+        if (left <= 0) {
+            return 0;
         }
 
-        // 背包侧看投影容器还缺多少，容器侧看还要去仓储取多少
-        return state.matchSlot(stack, slot.inventory instanceof PlayerInventory);
+        int label = Math.min(left, stack.getMaxCount());
+        remaining.put(need.key(), left - label);
+        return label;
+    }
+
+    @Unique
+    private Map<ItemType, Integer> putLabelRemaining() {
+        if (xihePutLabelRemaining == null) {
+            xihePutLabelRemaining = new HashMap<>();
+        }
+        return xihePutLabelRemaining;
+    }
+
+    @Unique
+    private Map<ItemType, Integer> takeLabelRemaining() {
+        if (xiheTakeLabelRemaining == null) {
+            xiheTakeLabelRemaining = new HashMap<>();
+        }
+        return xiheTakeLabelRemaining;
     }
 
     /**

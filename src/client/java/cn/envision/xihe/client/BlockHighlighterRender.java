@@ -17,6 +17,8 @@ import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.Vec3d;
 import org.slf4j.Logger;
 
+import java.util.Set;
+
 /**
  * 高亮方块的线框渲染与事件注册，状态与仓储匹配逻辑见 {@link HighlightState}。
  * <p>
@@ -78,7 +80,8 @@ public final class BlockHighlighterRender {
         if (isHoldingTrigger) {
             Color4f storageColor = HighlightConfig.getStorageContainerColor();
             for (BlockPos storagePos : state.getStorageContainers()) {
-                renderContainer(state, client.world, cameraPos, storagePos, storageColor, throughWalls);
+                renderContainer(state, client.world, cameraPos, storagePos, storageColor, throughWalls,
+                        state.getStorageContainers());
             }
 
             BlockPos projectionContainer = state.getCurrentProjectionContainer();
@@ -86,28 +89,28 @@ public final class BlockHighlighterRender {
                 renderOutline(cameraPos, projectionContainer, HighlightConfig.getProjectionContainerColor(), throughWalls);
             }
         } else {
+            Set<BlockPos> matching = state.getMatchingStorageContainers();
             Color4f matchingColor = HighlightConfig.getMatchingContainerColor();
-            for (BlockPos matchingPos : state.getMatchingStorageContainers()) {
-                renderContainer(state, client.world, cameraPos, matchingPos, matchingColor, throughWalls);
+            for (BlockPos matchingPos : matching) {
+                renderContainer(state, client.world, cameraPos, matchingPos, matchingColor, throughWalls, matching);
             }
         }
     }
 
     /**
-     * 画一个已登记的仓储容器：大箱子与另一半合并成一个整体框，其余按单格画。
-     * <p>
-     * 合并时只由坐标较小的那一半画一次，避免两半各画一遍。
+     * 大箱子由两半合并绘制时，另一半必须在同一次遍历的集合里，
+     * 否则（例如黄框只遍历匹配到的那一半）会互相跳过导致整箱都不画。
      */
     private static void renderContainer(HighlightState state, ClientWorld world, Vec3d cameraPos,
-                                        BlockPos pos, Color4f color, boolean throughWalls) {
+                                        BlockPos pos, Color4f color, boolean throughWalls,
+                                        Set<BlockPos> considered) {
         // 方块被撬掉或换掉后不再绘制，避免原地留下幽灵框
         if (!state.isStorageContainerPresent(pos, world)) {
             return;
         }
 
         BlockPos partner = state.getChestPartner(pos);
-        // 另一半可能已被撬掉或还没登记，这时退回按单格画
-        if (partner == null || !state.getStorageContainers().contains(partner)) {
+        if (partner == null || !considered.contains(partner)) {
             renderOutline(cameraPos, pos, color, throughWalls);
         } else if (partner.asLong() > pos.asLong()) {
             renderChestOutline(cameraPos, pos, partner, color, throughWalls);
