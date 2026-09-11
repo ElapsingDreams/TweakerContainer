@@ -1,6 +1,5 @@
 package cn.envision.xihe.client.features;
 
-import cn.envision.xihe.client.LinkedStorageEntry;
 import cn.envision.xihe.client.utils.ContainerUtils;
 
 import cn.envision.xihe.client.utils.LocalPlacementPos;
@@ -27,14 +26,6 @@ import java.util.Optional;
  */
 public final class PlacementContainerAccess {
     private static final SimpleInventory EMPTY_CHEST_INVENTORY = new SimpleInventory(27);
-    public static LinkedStorageEntry getEntry(BlockPos worldPos, BlockState worldState) {
-        return new LinkedStorageEntry(worldPos, null, getSchematicInventory(worldPos, worldState).orElse(null));
-    }
-
-    public static LinkedStorageEntry getEntry(BlockPos worldPos, BlockState worldState, SimpleInventory worldInventory) {
-        return new LinkedStorageEntry(worldPos, worldInventory, getSchematicInventory(worldPos, worldState).orElse(null));
-    }
-
 
     public static Optional<SimpleInventory> getSchematicInventory(BlockPos worldPos, BlockState worldState) {
         ChestType type = getChestType(worldState);

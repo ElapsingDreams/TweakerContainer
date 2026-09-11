@@ -1,8 +1,10 @@
 package cn.envision.xihe.client;
 
+import cn.envision.xihe.client.config.HighlightConfig;
 import cn.envision.xihe.client.features.PlacementContainerAccess;
 import net.minecraft.block.BlockState;
 import net.minecraft.client.MinecraftClient;
+import net.minecraft.component.ComponentChanges;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.inventory.Inventory;
 import net.minecraft.inventory.SimpleInventory;
@@ -29,9 +31,16 @@ import java.util.concurrent.CopyOnWriteArrayList;
 public final class HighlightState {
     private static final HighlightState INSTANCE = new HighlightState();
 
-    private final Map<Item, Integer> remainingNeeded = new ConcurrentHashMap<>();
-    // 投影容器自身还缺多少（按物品汇总），用于提示背包里该放多少个
-    private final Map<Item, Integer> projectionMissing = new ConcurrentHashMap<>();
+    /**
+     * 需求与缺口的聚合键：默认只按物品，开启严格校验后再带上物品组件（NBT）。
+     * <p>
+     * {@link ComponentChanges} 自带 equals/hashCode，可以直接作为 map 键。
+     */
+    private record StackKey(Item item, ComponentChanges components) {
+    }
+
+    private final Map<StackKey, Integer> remainingNeeded = new ConcurrentHashMap<>();
+    private final Map<StackKey, Integer> projectionMissing = new ConcurrentHashMap<>();
     private final Map<BlockPos, Inventory> storageContainerCache = new ConcurrentHashMap<>();
     private final Set<BlockPos> highlightedBlocks = ConcurrentHashMap.newKeySet();
     private final Set<BlockPos> storageContainers = ConcurrentHashMap.newKeySet();
@@ -53,6 +62,18 @@ public final class HighlightState {
         return INSTANCE;
     }
 
+    /** 按当前配置决定是否区分 NBT/组件。 */
+    private static StackKey keyOf(ItemStack stack) {
+        return new StackKey(stack.getItem(),
+                HighlightConfig.isStrictNbt() ? stack.getComponentChanges() : null);
+    }
+
+    private static void merge(Map<StackKey, Integer> counts, ItemStack stack) {
+        if (!stack.isEmpty()) {
+            counts.merge(keyOf(stack), stack.getCount(), Integer::sum);
+        }
+    }
+
     // ---------- 渲染侧只读视图 ----------
 
     public Set<BlockPos> getHighlightedBlocks() {
@@ -71,12 +92,35 @@ public final class HighlightState {
         return currentProjectionContainer;
     }
 
-    public Map<Item, Integer> getRemainingNeeded() {
-        return remainingNeeded;
+    // ---------- 槽位提示查询 ----------
+
+    /** 投影容器自身还缺多少，也就是背包里该放进去多少；0 表示不需要。 */
+    public int getProjectionMissing(ItemStack stack) {
+        return stack.isEmpty() ? 0 : projectionMissing.getOrDefault(keyOf(stack), 0);
     }
 
-    public Map<Item, Integer> getProjectionMissing() {
-        return projectionMissing;
+    /** 仓储视角还需要多少（已扣掉背包与投影容器里已有的）；0 表示不需要。 */
+    public int getRemainingNeeded(ItemStack stack) {
+        return stack.isEmpty() ? 0 : remainingNeeded.getOrDefault(keyOf(stack), 0);
+    }
+
+    /**
+     * 严格校验下，该物品是否存在“物品相同但组件不同”的需求，用于换色提示。
+     *
+     * @param projectionView true 查投影容器缺口，false 查仓储需求
+     */
+    public boolean hasComponentMismatch(ItemStack stack, boolean projectionView) {
+        if (stack.isEmpty() || !HighlightConfig.isStrictNbt()) {
+            return false;
+        }
+
+        Map<StackKey, Integer> source = projectionView ? projectionMissing : remainingNeeded;
+        for (StackKey key : source.keySet()) {
+            if (key.item() == stack.getItem() && !key.components().equals(stack.getComponentChanges())) {
+                return true;
+            }
+        }
+        return false;
     }
 
     // ---------- 手动标记 ----------
@@ -122,56 +166,45 @@ public final class HighlightState {
             return;
         }
 
-        // 1. 统计玩家背包里已有的物品数量
+        // 1. 背包里已有的数量
+        Map<StackKey, Integer> playerCount = new HashMap<>();
         PlayerEntity player = MinecraftClient.getInstance().player;
-        Map<Item, Integer> playerInventoryCount = new HashMap<>();
         if (player != null) {
             for (int i = 0; i < player.getInventory().size(); i++) {
-                ItemStack stack = player.getInventory().getStack(i);
-                if (!stack.isEmpty()) {
-                    playerInventoryCount.merge(stack.getItem(), stack.getCount(), Integer::sum);
-                }
+                merge(playerCount, player.getInventory().getStack(i));
             }
         }
 
-        // 2. 统计投影容器里已有的物品数量
-        Map<Item, Integer> projectionContainerCount = new HashMap<>();
+        // 2. 投影容器里已有的数量
+        Map<StackKey, Integer> containerCount = new HashMap<>();
         Inventory projectionInv = storageContainerCache.get(currentProjectionContainer);
         if (projectionInv != null) {
             for (int i = 0; i < projectionInv.size(); i++) {
-                ItemStack stack = projectionInv.getStack(i);
-                if (!stack.isEmpty()) {
-                    projectionContainerCount.merge(stack.getItem(), stack.getCount(), Integer::sum);
-                }
+                merge(containerCount, projectionInv.getStack(i));
             }
         }
 
-        // 3. 先把同一物品在多个槽位的需求合并，再整体扣除背包和投影容器里的数量
-        Map<Item, Integer> neededTotal = new HashMap<>();
+        // 3. 需求按总数合并后再扣减，几组相同物品会算在一起
+        Map<StackKey, Integer> required = new HashMap<>();
         for (ItemStack missing : currentMissingItems) {
-            if (missing.isEmpty()) {
-                continue;
-            }
-            neededTotal.merge(missing.getItem(), missing.getCount(), Integer::sum);
+            merge(required, missing);
         }
 
-        for (Map.Entry<Item, Integer> entry : neededTotal.entrySet()) {
-            int required = entry.getValue();
-            int inContainer = projectionContainerCount.getOrDefault(entry.getKey(), 0);
+        for (Map.Entry<StackKey, Integer> entry : required.entrySet()) {
+            StackKey key = entry.getKey();
+            int need = entry.getValue();
+            int inContainer = containerCount.getOrDefault(key, 0);
 
             // 投影容器自己还缺的，就是背包里该往里放的
-            int missing = required - inContainer;
+            int missing = need - inContainer;
             if (missing > 0) {
-                projectionMissing.put(entry.getKey(), missing);
+                projectionMissing.put(key, missing);
             }
 
-            // 扣掉背包与容器里已有的，才是还要去仓储取的数量
-            int remaining = required
-                    - playerInventoryCount.getOrDefault(entry.getKey(), 0)
-                    - inContainer;
-
+            // 再扣掉背包里已有的，才是还要去仓储取的数量
+            int remaining = need - playerCount.getOrDefault(key, 0) - inContainer;
             if (remaining > 0) {
-                remainingNeeded.put(entry.getKey(), remaining);
+                remainingNeeded.put(key, remaining);
             }
         }
 
@@ -189,7 +222,7 @@ public final class HighlightState {
 
             for (int i = 0; i < storageInv.size(); i++) {
                 ItemStack storedStack = storageInv.getStack(i);
-                if (!storedStack.isEmpty() && remainingNeeded.containsKey(storedStack.getItem())) {
+                if (!storedStack.isEmpty() && remainingNeeded.containsKey(keyOf(storedStack))) {
                     matchingStorageContainers.add(storagePos);
                     break;
                 }
@@ -238,6 +271,7 @@ public final class HighlightState {
         if (pos == null) {
             return;
         }
+
         BlockPos immutablePos = pos.toImmutable();
         boolean changed = storageContainers.remove(immutablePos);
         changed |= storageContainerCache.remove(immutablePos) != null;
@@ -298,7 +332,9 @@ public final class HighlightState {
     }
 
     /**
-     * 对照所有已缓存的仓储容器，返回蓝图中还没凑齐的槽位物品。
+     * 对照所有已缓存的仓储容器，按总数返回蓝图中还没凑齐的物品。
+     * <p>
+     * 同一个物品在蓝图里占多个槽位时按合计需求比较，避免“两组各 64、仓储有 64”被判为已凑齐。
      */
     public List<ItemStack> findMissingItems(BlockPos projectionPos, SimpleInventory schematicInv) {
         List<ItemStack> missing = new ArrayList<>();
@@ -306,27 +342,34 @@ public final class HighlightState {
             return missing;
         }
 
-        // 先把所有仓储容器按物品汇总一次，避免逐个需求重复扫描
-        Map<Item, Integer> storageTotals = new HashMap<>();
+        Map<StackKey, Integer> required = new HashMap<>();
+        Map<StackKey, ItemStack> samples = new HashMap<>();
+        for (int i = 0; i < schematicInv.size(); i++) {
+            ItemStack requiredStack = schematicInv.getStack(i);
+            if (requiredStack.isEmpty()) {
+                continue;
+            }
+            StackKey key = keyOf(requiredStack);
+            required.merge(key, requiredStack.getCount(), Integer::sum);
+            samples.putIfAbsent(key, requiredStack);
+        }
+
+        Map<StackKey, Integer> stored = new HashMap<>();
         for (Inventory storageInv : storageContainerCache.values()) {
             if (storageInv == null) {
                 continue;
             }
             for (int i = 0; i < storageInv.size(); i++) {
-                ItemStack stored = storageInv.getStack(i);
-                if (!stored.isEmpty()) {
-                    storageTotals.merge(stored.getItem(), stored.getCount(), Integer::sum);
-                }
+                merge(stored, storageInv.getStack(i));
             }
         }
 
-        for (int i = 0; i < schematicInv.size(); i++) {
-            ItemStack required = schematicInv.getStack(i);
-            if (required.isEmpty()) {
-                continue;
-            }
-            if (storageTotals.getOrDefault(required.getItem(), 0) < required.getCount()) {
-                missing.add(required.copy());
+        for (Map.Entry<StackKey, Integer> entry : required.entrySet()) {
+            int lack = entry.getValue() - stored.getOrDefault(entry.getKey(), 0);
+            if (lack > 0) {
+                ItemStack stack = samples.get(entry.getKey()).copy();
+                stack.setCount(lack);
+                missing.add(stack);
             }
         }
         return missing;
@@ -346,30 +389,30 @@ public final class HighlightState {
             return;
         }
 
-        boolean fullySatisfied = true;
+        // 需求与可提供数量都按总数汇总后再逐个比较
+        Map<StackKey, Integer> required = new HashMap<>();
         for (ItemStack missingStack : currentMissingItems) {
-            int foundCount = 0;
-            for (int i = 0; i < storageInv.size(); i++) {
-                ItemStack storedStack = storageInv.getStack(i);
-                if (ItemStack.areItemsEqual(storedStack, missingStack)) {
-                    foundCount += storedStack.getCount();
-                }
-            }
-            if (foundCount < missingStack.getCount()) {
-                fullySatisfied = false;
-                break;
+            merge(required, missingStack);
+        }
+
+        Map<StackKey, Integer> available = new HashMap<>();
+        for (int i = 0; i < storageInv.size(); i++) {
+            merge(available, storageInv.getStack(i));
+        }
+
+        for (Map.Entry<StackKey, Integer> entry : required.entrySet()) {
+            if (available.getOrDefault(entry.getKey(), 0) < entry.getValue()) {
+                return;
             }
         }
 
-        if (fullySatisfied) {
-            storageContainers.remove(immutableStoragePos);
-            storageContainerCache.remove(immutableStoragePos);
-            markDirty(); // 下一帧重算匹配并刷新高亮
-        }
+        storageContainers.remove(immutableStoragePos);
+        storageContainerCache.remove(immutableStoragePos);
+        markDirty(); // 下一帧重算匹配并刷新高亮
     }
 
     /**
-     * 断线或手动 /highlightblock clear 时重置全部状态。
+     * 断线或界面上的清除按钮触发时重置全部状态。
      */
     public void clearAll() {
         storageContainers.clear();

@@ -16,17 +16,11 @@ import net.minecraft.util.math.Vec3d;
  * <p>
  * 绘制交给 malilib（Litematica 的底层库）：{@link RenderUtils#renderBlockOutline} 用的是
  * Litematica 描边同一套 pipeline（{@code DEBUG_LINES_MASA_SIMPLE_*}），透视与线宽都由它处理，
- * 本类只负责颜色与距离裁剪。
+ * 本类只负责颜色、距离裁剪与调用。
  */
 public final class BlockHighlighterRender {
-    // 颜色常量（ARGB格式）
-    private static final int COLOR_PROJECTION = 0xFF00FF00; // 绿色
-    private static final int COLOR_STORAGE = 0xFF0000FF;    // 蓝色
-    private static final int COLOR_MATCHING = 0xFFFFFF00;   // 黄色
-    private static final int COLOR_MANUAL = 0xFFFF00FF;     // 品红（/highlightblock 手动标记）
-
     // 线框相对方块表面的外扩量（格），避免与方块表面 z-fighting，同 Litematica 的 expand 参数
-    private static final float EXPAND = 0.005F;  //0.002F
+    private static final float EXPAND = 0.005F;
     // 线宽（像素），同 Litematica 的 renderBlockOutline 参数
     private static final float LINE_WIDTH = 1.0F;
 
@@ -74,40 +68,33 @@ public final class BlockHighlighterRender {
         boolean throughWalls = HighlightConfig.isSeeThrough();
 
         for (BlockPos highlightPos : state.getHighlightedBlocks()) {
-            renderOutline(cameraPos, highlightPos, COLOR_MANUAL, throughWalls);
+            renderOutline(cameraPos, highlightPos, HighlightConfig.getManualBlockColor(), throughWalls);
         }
 
         if (isHoldingTrigger) {
             for (BlockPos storagePos : state.getStorageContainers()) {
-                renderOutline(cameraPos, storagePos, COLOR_STORAGE, throughWalls);
+                renderOutline(cameraPos, storagePos, HighlightConfig.getStorageContainerColor(), throughWalls);
             }
+
             BlockPos projectionContainer = state.getCurrentProjectionContainer();
             if (projectionContainer != null) {
-                renderOutline(cameraPos, projectionContainer, COLOR_PROJECTION, throughWalls);
+                renderOutline(cameraPos, projectionContainer, HighlightConfig.getProjectionContainerColor(), throughWalls);
             }
         } else {
             for (BlockPos matchingPos : state.getMatchingStorageContainers()) {
-                renderOutline(cameraPos, matchingPos, COLOR_MATCHING, throughWalls);
+                renderOutline(cameraPos, matchingPos, HighlightConfig.getMatchingContainerColor(), throughWalls);
             }
         }
     }
 
-    private static void renderOutline(Vec3d cameraPos, BlockPos pos, int color, boolean throughWalls) {
+    private static void renderOutline(Vec3d cameraPos, BlockPos pos, Color4f color, boolean throughWalls) {
         if (!isWithinRenderDistance(cameraPos, pos)) {
             return;
         }
-        RenderUtils.renderBlockOutline(pos, EXPAND, LINE_WIDTH, toColor4f(color), throughWalls);
+        RenderUtils.renderBlockOutline(pos, EXPAND, LINE_WIDTH, color, throughWalls);
     }
 
     private static boolean isWithinRenderDistance(Vec3d cameraPos, BlockPos pos) {
         return cameraPos.squaredDistanceTo(Vec3d.ofCenter(pos)) <= MAX_RENDER_DISTANCE_SQ;
-    }
-
-    private static Color4f toColor4f(int color) {
-        float r = ((color >> 16) & 0xFF) / 255.0F;
-        float g = ((color >> 8) & 0xFF) / 255.0F;
-        float b = (color & 0xFF) / 255.0F;
-        float a = ((color >> 24) & 0xFF) / 255.0F;
-        return new Color4f(r, g, b, a);
     }
 }

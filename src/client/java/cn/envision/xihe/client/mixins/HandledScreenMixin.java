@@ -22,18 +22,12 @@ import static cn.envision.xihe.client.config.HighlightConfig.isEnabled;
 import static cn.envision.xihe.client.features.InventoryOverlay.getCurrentContainerPos;
 
 /**
- * 容器界面的缺货提示：在槽位上标出还缺的物品，并在左下角写上数量。
+ * 容器界面的缺货提示：在槽位上标出还缺的物品，并在槽位左上角写上数量。
  * <p>
  * 打开投影容器时提示背包里该放进去多少，打开仓储容器时提示该取出来多少。
  */
 @Mixin(HandledScreen.class)
 public abstract class HandledScreenMixin<T extends ScreenHandler> {
-    // 该放进投影容器的物品
-    @Unique
-    private static final int XIHE_SLOT_COLOR_PUT = 0x8040FF40;
-    // 该从仓储取出的物品
-    @Unique
-    private static final int XIHE_SLOT_COLOR_TAKE = 0x6000FF00;
 
     @Inject(method = "close",
         at = @At("RETURN"),
@@ -96,7 +90,7 @@ public abstract class HandledScreenMixin<T extends ScreenHandler> {
         float scale = HighlightConfig.getHintTextScale();
         matrices.scale(scale, scale);
         context.drawText(MinecraftClient.getInstance().textRenderer,
-                Integer.toString(count), 0, 0, 0xFFFFFFFF, true);
+                Integer.toString(count), 0, 0, HighlightConfig.getSlotCountTextColor(), true);
         matrices.popMatrix();
     }
 
@@ -105,32 +99,55 @@ public abstract class HandledScreenMixin<T extends ScreenHandler> {
      */
     @Unique
     private int getHighlightColor(HighlightState state, Slot slot) {
-        if (getNeededAmount(state, slot) <= 0) {
+        int needed = getNeededAmount(state, slot);
+        if (needed > 0) {
+            return isProjectionContainerOpen(state)
+                    ? HighlightConfig.getSlotPutColor()
+                    : HighlightConfig.getSlotTakeColor();
+        }
+
+        // 严格校验时，物品相同但 NBT 不同的槽位换一种颜色提示
+        if (!HighlightConfig.isNbtMismatchColor()) {
             return 0;
         }
-        return isProjectionContainerOpen(state) ? XIHE_SLOT_COLOR_PUT : XIHE_SLOT_COLOR_TAKE;
+
+        ItemStack stack = slot.getStack();
+        if (stack.isEmpty() || !isHintSlot(state, slot)) {
+            return 0;
+        }
+
+        boolean projectionView = isProjectionContainerOpen(state);
+        return state.hasComponentMismatch(stack, projectionView)
+                ? HighlightConfig.getSlotNbtMismatchColor()
+                : 0;
     }
 
     /**
      * 该槽位还要处理多少个物品，0 表示不用管。
-     * <p>
-     * 投影容器只提示背包侧（要放进去的），仓储容器只提示容器侧（要取出来的）。
      */
     @Unique
     private int getNeededAmount(HighlightState state, Slot slot) {
         ItemStack stack = slot.getStack();
-        if (stack.isEmpty()) return 0;
-        if (getCurrentContainerPos() == null) return 0;
-
-        boolean playerSlot = slot.inventory instanceof PlayerInventory;
-
-        // 投影容器自身还缺多少，就是背包里该放进去多少
-        if (isProjectionContainerOpen(state)) {
-            return playerSlot ? state.getProjectionMissing().getOrDefault(stack.getItem(), 0) : 0;
+        if (stack.isEmpty() || getCurrentContainerPos() == null) {
+            return 0;
+        }
+        if (!isHintSlot(state, slot)) {
+            return 0;
         }
 
-        // 仓储容器里还能补上缺口的，就是该取出来多少
-        return playerSlot ? 0 : state.getRemainingNeeded().getOrDefault(stack.getItem(), 0);
+        // 投影容器自身还缺多少，就是背包里该放进去多少
+        return isProjectionContainerOpen(state)
+                ? state.getProjectionMissing(stack)
+                : state.getRemainingNeeded(stack);
+    }
+
+    /**
+     * 该槽位是否属于当前要提示的一侧：投影容器看背包侧，仓储容器看容器侧。
+     */
+    @Unique
+    private boolean isHintSlot(HighlightState state, Slot slot) {
+        boolean playerSlot = slot.inventory instanceof PlayerInventory;
+        return isProjectionContainerOpen(state) == playerSlot;
     }
 
     @Unique
@@ -140,9 +157,11 @@ public abstract class HandledScreenMixin<T extends ScreenHandler> {
         if (projectionContainer == null || currentContainer == null) {
             return false;
         }
+
         if (!projectionContainer.equals(currentContainer)) {
             return false;
         }
+
         // 玩家背包界面是否提示由配置决定，免得关掉容器后按 E 也被标色
         if ((Object) this instanceof InventoryScreen) {
             return HighlightConfig.isHintInPlayerInventory();
