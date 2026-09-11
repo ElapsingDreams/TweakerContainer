@@ -49,7 +49,7 @@ public final class PlacementContainerAccess {
         return type == ChestType.RIGHT ? Optional.of(merge(chest1, chest2)) : Optional.of(merge(chest2, chest1));
     }
 
-    public static Optional<SimpleInventory> getSchematicInventoryInternal(BlockPos worldPos, BlockState worldState) {
+    private static Optional<SimpleInventory> getSchematicInventoryInternal(BlockPos worldPos, BlockState worldState) {
         Optional<Inventory> dummyInv = ContainerUtils.validateContainer(worldPos, worldState);
         // World block is not a container
         if (dummyInv.isEmpty())

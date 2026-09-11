@@ -3,18 +3,16 @@ package cn.envision.xihe.client;
 import cn.envision.xihe.client.config.HighlightConfig;
 import cn.envision.xihe.client.features.PlacementContainerAccess;
 import fi.dy.masa.malilib.util.InventoryUtils;
+import fi.dy.masa.malilib.util.ItemType;
 import net.minecraft.block.BlockState;
 import net.minecraft.client.MinecraftClient;
-import net.minecraft.component.ComponentChanges;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.inventory.Inventory;
 import net.minecraft.inventory.SimpleInventory;
-import net.minecraft.item.Item;
 import net.minecraft.item.ItemStack;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.world.World;
 
-import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -33,23 +31,18 @@ public final class HighlightState {
     private static final HighlightState INSTANCE = new HighlightState();
 
     /**
-     * 需求与缺口的聚合键：默认只按物品，开启严格校验后再带上物品组件（NBT）。
-     * <p>
-     * {@link ComponentChanges} 自带 equals/hashCode，可以直接作为 map 键。
+     * 需求与缺口的聚合键直接用 malilib 的 {@link ItemType}：
+     * checkNBT 跟随严格校验开关，为 true 时连物品组件（NBT）一起比较。
      */
-    public record StackKey(Item item, ComponentChanges components) {
-    }
-
-    // 嵌套读取的最大层数：箱子 → 潜影盒 → 收纳袋
     private static final int MAX_NESTING_DEPTH = 2;
 
     /** 该物品对应的需求键，供界面判断“同一种物品”用。 */
-    public static StackKey requirementKey(ItemStack stack) {
+    public static ItemType requirementKey(ItemStack stack) {
         return stack.isEmpty() ? null : keyOf(stack);
     }
 
-    private final Map<StackKey, Integer> remainingNeeded = new ConcurrentHashMap<>();
-    private final Map<StackKey, Integer> projectionMissing = new ConcurrentHashMap<>();
+    private final Map<ItemType, Integer> remainingNeeded = new ConcurrentHashMap<>();
+    private final Map<ItemType, Integer> projectionMissing = new ConcurrentHashMap<>();
     private final Map<BlockPos, Inventory> storageContainerCache = new ConcurrentHashMap<>();
     private final Set<BlockPos> storageContainers = ConcurrentHashMap.newKeySet();
     private final Set<BlockPos> matchingStorageContainers = ConcurrentHashMap.newKeySet();
@@ -71,12 +64,11 @@ public final class HighlightState {
     }
 
     /** 按当前配置决定是否区分 NBT/组件。 */
-    private static StackKey keyOf(ItemStack stack) {
-        return new StackKey(stack.getItem(),
-                HighlightConfig.isStrictNbt() ? stack.getComponentChanges() : null);
+    private static ItemType keyOf(ItemStack stack) {
+        return new ItemType(stack, HighlightConfig.isStrictNbt());
     }
 
-    private static void merge(Map<StackKey, Integer> counts, ItemStack stack, int depth) {
+    private static void merge(Map<ItemType, Integer> counts, ItemStack stack, int depth) {
         if (stack.isEmpty()) {
             return;
         }
@@ -109,7 +101,7 @@ public final class HighlightState {
     }
 
     /** 该物品或它装着的东西里，是否有需要去取的。 */
-    private static boolean containsNeeded(Map<StackKey, Integer> needed, ItemStack stack, int depth) {
+    private static boolean containsNeeded(Map<ItemType, Integer> needed, ItemStack stack, int depth) {
         if (stack.isEmpty()) {
             return false;
         }
@@ -164,9 +156,10 @@ public final class HighlightState {
             return false;
         }
 
-        Map<StackKey, Integer> source = projectionView ? projectionMissing : remainingNeeded;
-        for (StackKey key : source.keySet()) {
-            if (key.item() == stack.getItem() && !key.components().equals(stack.getComponentChanges())) {
+        Map<ItemType, Integer> source = projectionView ? projectionMissing : remainingNeeded;
+        ItemType self = keyOf(stack);
+        for (ItemType key : source.keySet()) {
+            if (key.getStack().getItem() == stack.getItem() && !key.equals(self)) {
                 return true;
             }
         }
@@ -209,7 +202,7 @@ public final class HighlightState {
         }
 
         // 1. 背包里已有的数量
-        Map<StackKey, Integer> playerCount = new HashMap<>();
+        Map<ItemType, Integer> playerCount = new HashMap<>();
         PlayerEntity player = MinecraftClient.getInstance().player;
         if (player != null) {
             for (int i = 0; i < player.getInventory().size(); i++) {
@@ -218,7 +211,7 @@ public final class HighlightState {
         }
 
         // 2. 投影容器里已有的数量
-        Map<StackKey, Integer> containerCount = new HashMap<>();
+        Map<ItemType, Integer> containerCount = new HashMap<>();
         Inventory projectionInv = storageContainerCache.get(currentProjectionContainer);
         if (projectionInv != null) {
             for (int i = 0; i < projectionInv.size(); i++) {
@@ -227,13 +220,13 @@ public final class HighlightState {
         }
 
         // 3. 需求按总数合并后再扣减，几组相同物品会算在一起；需求侧不展开容器内容
-        Map<StackKey, Integer> required = new HashMap<>();
+        Map<ItemType, Integer> required = new HashMap<>();
         for (ItemStack missing : currentMissingItems) {
             merge(required, missing, 0);
         }
 
-        for (Map.Entry<StackKey, Integer> entry : required.entrySet()) {
-            StackKey key = entry.getKey();
+        for (Map.Entry<ItemType, Integer> entry : required.entrySet()) {
+            ItemType key = entry.getKey();
             int need = entry.getValue();
             int inContainer = containerCount.getOrDefault(key, 0);
 
@@ -374,50 +367,6 @@ public final class HighlightState {
     }
 
     /**
-     * 对照所有已缓存的仓储容器，按总数返回蓝图中还没凑齐的物品。
-     * <p>
-     * 同一个物品在蓝图里占多个槽位时按合计需求比较，避免“两组各 64、仓储有 64”被判为已凑齐。
-     */
-    public List<ItemStack> findMissingItems(BlockPos projectionPos, SimpleInventory schematicInv) {
-        List<ItemStack> missing = new ArrayList<>();
-        if (isInventoryEmpty(schematicInv)) {
-            return missing;
-        }
-
-        Map<StackKey, Integer> required = new HashMap<>();
-        Map<StackKey, ItemStack> samples = new HashMap<>();
-        for (int i = 0; i < schematicInv.size(); i++) {
-            ItemStack requiredStack = schematicInv.getStack(i);
-            if (requiredStack.isEmpty()) {
-                continue;
-            }
-            StackKey key = keyOf(requiredStack);
-            required.merge(key, requiredStack.getCount(), Integer::sum);
-            samples.putIfAbsent(key, requiredStack);
-        }
-
-        Map<StackKey, Integer> stored = new HashMap<>();
-        for (Inventory storageInv : storageContainerCache.values()) {
-            if (storageInv == null) {
-                continue;
-            }
-            for (int i = 0; i < storageInv.size(); i++) {
-                merge(stored, storageInv.getStack(i), MAX_NESTING_DEPTH);
-            }
-        }
-
-        for (Map.Entry<StackKey, Integer> entry : required.entrySet()) {
-            int lack = entry.getValue() - stored.getOrDefault(entry.getKey(), 0);
-            if (lack > 0) {
-                ItemStack stack = samples.get(entry.getKey()).copy();
-                stack.setCount(lack);
-                missing.add(stack);
-            }
-        }
-        return missing;
-    }
-
-    /**
      * 该仓储箱已能满足投影需求时，从仓储名单中移除。
      */
     public void checkAndRemoveSatisfiedContainer(BlockPos storagePos) {
@@ -432,17 +381,17 @@ public final class HighlightState {
         }
 
         // 需求与可提供数量都按总数汇总后再逐个比较
-        Map<StackKey, Integer> required = new HashMap<>();
+        Map<ItemType, Integer> required = new HashMap<>();
         for (ItemStack missingStack : currentMissingItems) {
             merge(required, missingStack, 0);
         }
 
-        Map<StackKey, Integer> available = new HashMap<>();
+        Map<ItemType, Integer> available = new HashMap<>();
         for (int i = 0; i < storageInv.size(); i++) {
             merge(available, storageInv.getStack(i), MAX_NESTING_DEPTH);
         }
 
-        for (Map.Entry<StackKey, Integer> entry : required.entrySet()) {
+        for (Map.Entry<ItemType, Integer> entry : required.entrySet()) {
             if (available.getOrDefault(entry.getKey(), 0) < entry.getValue()) {
                 return;
             }

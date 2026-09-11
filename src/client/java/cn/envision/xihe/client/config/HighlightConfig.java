@@ -262,7 +262,6 @@ public class HighlightConfig implements IConfigHandler {
             return DEFAULT_TRIGGER_ITEM;
         }
 
-        Item item = Registries.ITEM.get(identifier);
-        return item != null ? item : DEFAULT_TRIGGER_ITEM;
+        return Registries.ITEM.get(identifier);
     }
 }

@@ -3,6 +3,7 @@ package cn.envision.xihe.client.mixins;
 import cn.envision.xihe.client.HighlightState;
 import cn.envision.xihe.client.config.HighlightConfig;
 import cn.envision.xihe.client.features.InventoryOverlay;
+import fi.dy.masa.malilib.util.ItemType;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.gui.screen.ingame.HandledScreen;
@@ -33,9 +34,9 @@ import static cn.envision.xihe.client.config.HighlightConfig.isEnabled;
 public abstract class HandledScreenMixin<T extends ScreenHandler> {
     // 每帧记录已标注过的需求键，用于“同种物品只标第一个匹配格子”
     @Unique
-    private Set<HighlightState.StackKey> xiheShownPutKeys;
+    private Set<ItemType> xiheShownPutKeys;
     @Unique
-    private Set<HighlightState.StackKey> xiheShownTakeKeys;
+    private Set<ItemType> xiheShownTakeKeys;
     // 当前槽位是否要写数量，由 HEAD 阶段的高亮判定顺带给出
     @Unique
     private boolean xiheShowCount;
@@ -170,17 +171,17 @@ public abstract class HandledScreenMixin<T extends ScreenHandler> {
             return true;
         }
 
-        HighlightState.StackKey key = HighlightState.requirementKey(stack);
+        ItemType key = HighlightState.requirementKey(stack);
         if (key == null) {
             return true;
         }
 
-        Set<HighlightState.StackKey> shown = playerSlot ? shownPutKeys() : shownTakeKeys();
+        Set<ItemType> shown = playerSlot ? shownPutKeys() : shownTakeKeys();
         return shown.add(key);
     }
 
     @Unique
-    private Set<HighlightState.StackKey> shownPutKeys() {
+    private Set<ItemType> shownPutKeys() {
         if (xiheShownPutKeys == null) {
             xiheShownPutKeys = new HashSet<>();
         }
@@ -188,7 +189,7 @@ public abstract class HandledScreenMixin<T extends ScreenHandler> {
     }
 
     @Unique
-    private Set<HighlightState.StackKey> shownTakeKeys() {
+    private Set<ItemType> shownTakeKeys() {
         if (xiheShownTakeKeys == null) {
             xiheShownTakeKeys = new HashSet<>();
         }

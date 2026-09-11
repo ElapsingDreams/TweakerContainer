@@ -7,15 +7,11 @@ import fi.dy.masa.malilib.util.WorldUtils;
 import net.minecraft.block.BlockState;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.inventory.Inventory;
-import net.minecraft.inventory.SimpleInventory;
-import net.minecraft.item.ItemStack;
 import net.minecraft.screen.ScreenHandlerFactory;
-import net.minecraft.text.Text;
 import net.minecraft.util.hit.BlockHitResult;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.world.World;
 
-import java.util.List;
 import java.util.Optional;
 
 import static cn.envision.xihe.client.config.HighlightConfig.isEnabled;
@@ -74,48 +70,6 @@ public class InventoryOverlay {
         }
         getInstance().currentContainerPos = pos;
         return true;
-    }
-
-    public static void onContainerClose(BlockPos pos) {
-        if (pos == null) {
-            return;
-        }
-
-        World world = WorldUtils.getBestWorld(MinecraftClient.getInstance());
-        if (world == null) {
-            return;
-        }
-
-        BlockState state = world.getBlockState(pos);
-        // 重新获取容器内容
-        if (ContainerUtils.validateContainer(world, pos, state).isEmpty()) {
-            return;
-        }
-
-        // 投影容器：提示还缺哪些物品；仓储容器自动刷新，无需额外操作
-        if (LocalPlacementPos.get(pos).isPresent()) {
-            Optional<SimpleInventory> schematicInv = PlacementContainerAccess.getSchematicInventory(pos, state);
-            if (schematicInv.isPresent()) {
-                showMissingItemsHint(HighlightState.get().findMissingItems(pos, schematicInv.get()));
-            }
-        }
-    }
-
-    private static void showMissingItemsHint(List<ItemStack> missingItems) {
-        MinecraftClient client = MinecraftClient.getInstance();
-        if (client.player == null) return;
-
-        if (missingItems.isEmpty()) {
-            client.player.sendMessage(Text.translatable("xihe.message.all_items_present"), true);
-            return;
-        }
-
-        client.player.sendMessage(Text.translatable("xihe.message.missing_items"), true);
-        for (ItemStack stack : missingItems) {
-            Text itemName = stack.getItem().getName();
-            client.player.sendMessage(Text.translatable("xihe.message.item_format",
-                    stack.getCount(), itemName), true);
-        }
     }
 
     public static BlockPos getCurrentContainerPos() {
