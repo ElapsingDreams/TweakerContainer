@@ -440,13 +440,9 @@ public final class HighlightState {
         }
 
         BlockState current = world.getBlockState(pos);
-        if (current.getBlock() != expected.getBlock()) {
-            return false;
-        }
-
-        // 大箱子被撬掉一半后，另一半会变成单箱，箱子类型变了同样视为不再是原来那个容器
-        return !(current.getBlock() instanceof ChestBlock)
-                || current.get(ChestBlock.CHEST_TYPE) == expected.get(ChestBlock.CHEST_TYPE);
+        // 只比方块类型：大箱子被撬掉一半后，剩下那一半会从 LEFT/RIGHT 变成 SINGLE，
+        // 但那一格自己的数据仍然有效，应该保留并按单格继续绘制（配对由另一半失效时解除）
+        return current.getBlock() == expected.getBlock();
     }
 
     /** 复核登记的仓储容器：被撬掉或换成别的方块就取消登记，顺带清掉过期缓存。 */

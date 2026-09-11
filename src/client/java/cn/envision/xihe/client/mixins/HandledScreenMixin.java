@@ -7,6 +7,7 @@ import fi.dy.masa.malilib.util.ItemType;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.gui.screen.ingame.HandledScreen;
+import net.minecraft.client.gui.screen.ingame.ScreenHandlerProvider;
 import net.minecraft.entity.player.PlayerInventory;
 import net.minecraft.item.ItemStack;
 import net.minecraft.screen.ScreenHandler;
@@ -35,6 +36,9 @@ public abstract class HandledScreenMixin<T extends ScreenHandler> {
     // 每帧记录已标注过的需求键，用于“同种物品只标第一个匹配格子”
     @Unique
     private Set<ItemType> xiheShownPutKeys;
+    // 已抓取内容的界面 syncId，避免 init 因窗口尺寸变化而重复抓取
+    @Unique
+    private Integer xiheCapturedSyncId;
     @Unique
     private Set<ItemType> xiheShownTakeKeys;
     // 当前槽位是否要写数量，由 HEAD 阶段的高亮判定顺带给出
@@ -50,6 +54,48 @@ public abstract class HandledScreenMixin<T extends ScreenHandler> {
         InventoryOverlay.clearCurrentContainer();
         if (!isEnabled()) return;
         HighlightState.get().updateMatching();
+    }
+
+    /**
+     * 界面打开时一次性抓取容器内容，数据获取不再挂在渲染循环上。
+     */
+    @Inject(method = "init",
+        at = @At("RETURN"),
+        cancellable = false
+    )
+    @SuppressWarnings("unchecked")
+    private void onInit(CallbackInfo ci) {
+        if (!isEnabled()) return;
+
+        // 只处理刚右击过的容器；玩家背包等界面没有待处理坐标
+        BlockPos clickedPos = HighlightState.get().getAndClearTempProcessingPos();
+        if (clickedPos == null) return;
+
+        ScreenHandler handler = ((ScreenHandlerProvider<ScreenHandler>) (Object) this).getScreenHandler();
+        if (xiheCapturedSyncId != null && xiheCapturedSyncId == handler.syncId) {
+            return; // init 在窗口尺寸变化时会再次调用
+        }
+        xiheCapturedSyncId = handler.syncId;
+
+        // 同一屏的非玩家槽位共用一个 Inventory，取第一个就够
+        for (Slot slot : handler.slots) {
+            if (!(slot.inventory instanceof PlayerInventory)) {
+                HighlightState.get().cacheStorageInventory(clickedPos, slot.inventory);
+                return;
+            }
+        }
+    }
+
+    /**
+     * 每 tick 一次的重算（内部按时间节流），不再由画槽位驱动。
+     */
+    @Inject(method = "handledScreenTick",
+        at = @At("HEAD"),
+        cancellable = false
+    )
+    private void onHandledScreenTick(CallbackInfo ci) {
+        if (!isEnabled()) return;
+        HighlightState.get().ensureUpToDate();
     }
 
     @Inject(
@@ -77,17 +123,6 @@ public abstract class HandledScreenMixin<T extends ScreenHandler> {
         if (!isEnabled()) return;
 
         HighlightState state = HighlightState.get();
-
-        // 只在右击容器后缓存容器内容；背包侧（含合成格）不写入缓存
-        if (!(slot.inventory instanceof PlayerInventory)) {
-            BlockPos clickedPos = state.getAndClearTempProcessingPos();
-            if (clickedPos != null) {
-                state.cacheStorageInventory(clickedPos, slot.inventory);
-            }
-        }
-
-        // 标脏或超过刷新间隔时才重算，不再逐槽全量重建
-        state.ensureUpToDate();
 
         // 背景必须画在物品之前，否则会盖住图标
         int color = getHighlightColor(state, slot);
