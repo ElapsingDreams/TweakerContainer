@@ -121,4 +121,11 @@ public class InventoryOverlay {
     public static BlockPos getCurrentContainerPos() {
         return getInstance().currentContainerPos;
     }
+
+    /**
+     * 界面关闭时清掉记录，避免坐标过期导致其它界面被误判成还在该容器里。
+     */
+    public static void clearCurrentContainer() {
+        getInstance().currentContainerPos = null;
+    }
 }

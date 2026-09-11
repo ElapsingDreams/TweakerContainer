@@ -16,9 +16,6 @@ import fi.dy.masa.malilib.util.data.ModInfo;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
-import net.minecraft.client.MinecraftClient;
-import net.minecraft.util.hit.BlockHitResult;
-import net.minecraft.util.hit.HitResult;
 import org.slf4j.Logger;
 
 import java.util.List;
@@ -59,11 +56,6 @@ public class TweakerXiheClient implements ClientModInitializer {
      * 只在初始化时 addKeybindToMap 会在下一次重建时丢失，热键就失效了。
      */
     private static void setupHotkeys() {
-        HighlightConfig.Generic.MARK_TARGET_BLOCK.getKeybind().setCallback((action, keybind) -> {
-            markTargetBlock();
-            return true;
-        });
-
         IKeybindManager keybindManager = InputEventHandler.getKeybindManager();
         keybindManager.registerKeybindProvider(new IKeybindProvider() {
             @Override
@@ -71,31 +63,19 @@ public class TweakerXiheClient implements ClientModInitializer {
                 IKeybind openConfigGui = HighlightConfig.Generic.OPEN_CONFIG_GUI.getKeybind();
                 // 每次重建映射都重新挂回调，避免被改键流程冲掉
                 openConfigGui.setCallback(OPEN_CONFIG_GUI_CALLBACK);
-
                 manager.addKeybindToMap(openConfigGui);
-                manager.addKeybindToMap(HighlightConfig.Generic.MARK_TARGET_BLOCK.getKeybind());
             }
 
             @Override
             public void addHotkeys(IKeybindManager manager) {
                 manager.addHotkeysForCategory("TweakerXihe", "tweakerxihe.hotkeys.category.generic",
-                        List.of(HighlightConfig.Generic.OPEN_CONFIG_GUI, HighlightConfig.Generic.MARK_TARGET_BLOCK));
+                        List.of(HighlightConfig.Generic.OPEN_CONFIG_GUI));
             }
         });
 
         keybindManager.updateUsedKeys();
 
-        LOGGER.info("热键注册完成: openConfigGui='{}', markTargetBlock='{}'",
-                HighlightConfig.Generic.OPEN_CONFIG_GUI.getKeybind().getStringValue(),
-                HighlightConfig.Generic.MARK_TARGET_BLOCK.getKeybind().getStringValue());
-    }
-
-    // 标记准星指向的方块
-    private static void markTargetBlock() {
-        MinecraftClient client = MinecraftClient.getInstance();
-        if (client.crosshairTarget instanceof BlockHitResult hitResult
-                && hitResult.getType() == HitResult.Type.BLOCK) {
-            HighlightState.get().addHighlightedBlock(hitResult.getBlockPos());
-        }
+        LOGGER.info("热键注册完成: openConfigGui='{}'",
+                HighlightConfig.Generic.OPEN_CONFIG_GUI.getKeybind().getStringValue());
     }
 }

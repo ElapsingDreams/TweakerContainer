@@ -2,10 +2,10 @@ package cn.envision.xihe.client.mixins;
 
 import cn.envision.xihe.client.HighlightState;
 import cn.envision.xihe.client.config.HighlightConfig;
+import cn.envision.xihe.client.features.InventoryOverlay;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.gui.screen.ingame.HandledScreen;
-import net.minecraft.client.gui.screen.ingame.InventoryScreen;
 import net.minecraft.entity.player.PlayerInventory;
 import net.minecraft.item.ItemStack;
 import net.minecraft.screen.ScreenHandler;
@@ -19,12 +19,12 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 import static cn.envision.xihe.client.config.HighlightConfig.isEnabled;
-import static cn.envision.xihe.client.features.InventoryOverlay.getCurrentContainerPos;
 
 /**
  * 容器界面的缺货提示：在槽位上标出还缺的物品，并在槽位左上角写上数量。
  * <p>
- * 打开投影容器时提示背包里该放进去多少，打开仓储容器时提示该取出来多少。
+ * 打开投影容器时，背包侧显示该放进去多少；打开其它容器时，容器侧显示该取出多少，
+ * 背包侧是否也提示由配置决定。
  */
 @Mixin(HandledScreen.class)
 public abstract class HandledScreenMixin<T extends ScreenHandler> {
@@ -34,6 +34,8 @@ public abstract class HandledScreenMixin<T extends ScreenHandler> {
         cancellable = false
     )
     private void onClose(CallbackInfo ci){
+        // 关闭界面时清掉当前容器记录，否则再打开背包会被当成还停留在投影容器里
+        InventoryOverlay.clearCurrentContainer();
         if (!isEnabled()) return;
         HighlightState.get().updateMatching();
     }
@@ -99,11 +101,10 @@ public abstract class HandledScreenMixin<T extends ScreenHandler> {
      */
     @Unique
     private int getHighlightColor(HighlightState state, Slot slot) {
-        int needed = getNeededAmount(state, slot);
-        if (needed > 0) {
-            return isProjectionContainerOpen(state)
-                    ? HighlightConfig.getSlotPutColor()
-                    : HighlightConfig.getSlotTakeColor();
+        boolean playerSlot = slot.inventory instanceof PlayerInventory;
+
+        if (getNeededAmount(state, slot) > 0) {
+            return playerSlot ? HighlightConfig.getSlotPutColor() : HighlightConfig.getSlotTakeColor();
         }
 
         // 严格校验时，物品相同但 NBT 不同的槽位换一种颜色提示
@@ -112,12 +113,11 @@ public abstract class HandledScreenMixin<T extends ScreenHandler> {
         }
 
         ItemStack stack = slot.getStack();
-        if (stack.isEmpty() || !isHintSlot(state, slot)) {
+        if (stack.isEmpty() || !isHintSide(state, slot)) {
             return 0;
         }
 
-        boolean projectionView = isProjectionContainerOpen(state);
-        return state.hasComponentMismatch(stack, projectionView)
+        return state.hasComponentMismatch(stack, playerSlot)
                 ? HighlightConfig.getSlotNbtMismatchColor()
                 : 0;
     }
@@ -128,44 +128,35 @@ public abstract class HandledScreenMixin<T extends ScreenHandler> {
     @Unique
     private int getNeededAmount(HighlightState state, Slot slot) {
         ItemStack stack = slot.getStack();
-        if (stack.isEmpty() || getCurrentContainerPos() == null) {
-            return 0;
-        }
-        if (!isHintSlot(state, slot)) {
+        if (stack.isEmpty() || !isHintSide(state, slot)) {
             return 0;
         }
 
-        // 投影容器自身还缺多少，就是背包里该放进去多少
-        return isProjectionContainerOpen(state)
+        // 背包侧看投影容器还缺多少，容器侧看还要去仓储取多少
+        return slot.inventory instanceof PlayerInventory
                 ? state.getProjectionMissing(stack)
                 : state.getRemainingNeeded(stack);
     }
 
     /**
-     * 该槽位是否属于当前要提示的一侧：投影容器看背包侧，仓储容器看容器侧。
+     * 该槽位是否属于当前要提示的一侧。
+     * <p>
+     * 背包侧：投影容器打开时总是提示；其它界面（含玩家背包）看配置。
+     * 容器侧：打开了非投影的容器时才提示，避免没开容器时把合成格当成容器槽位。
      */
     @Unique
-    private boolean isHintSlot(HighlightState state, Slot slot) {
-        boolean playerSlot = slot.inventory instanceof PlayerInventory;
-        return isProjectionContainerOpen(state) == playerSlot;
+    private boolean isHintSide(HighlightState state, Slot slot) {
+        if (slot.inventory instanceof PlayerInventory) {
+            return isProjectionContainerOpen(state) || HighlightConfig.isHintInPlayerInventory();
+        }
+
+        return !isProjectionContainerOpen(state) && InventoryOverlay.getCurrentContainerPos() != null;
     }
 
     @Unique
     private boolean isProjectionContainerOpen(HighlightState state) {
         BlockPos projectionContainer = state.getCurrentProjectionContainer();
-        BlockPos currentContainer = getCurrentContainerPos();
-        if (projectionContainer == null || currentContainer == null) {
-            return false;
-        }
-
-        if (!projectionContainer.equals(currentContainer)) {
-            return false;
-        }
-
-        // 玩家背包界面是否提示由配置决定，免得关掉容器后按 E 也被标色
-        if ((Object) this instanceof InventoryScreen) {
-            return HighlightConfig.isHintInPlayerInventory();
-        }
-        return true;
+        BlockPos currentContainer = InventoryOverlay.getCurrentContainerPos();
+        return projectionContainer != null && projectionContainer.equals(currentContainer);
     }
 }

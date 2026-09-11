@@ -65,8 +65,6 @@ public class HighlightConfig implements IConfigHandler {
                 "缺货数量文字的字号倍数");
         public static final ConfigHotkey OPEN_CONFIG_GUI = new ConfigHotkey("openConfigGui", "X,C",
                 "打开配置界面");
-        public static final ConfigHotkey MARK_TARGET_BLOCK = new ConfigHotkey("markTargetBlock", "",
-                "标记准星指向的方块");
 
         public static final List<IConfigBase> OPTIONS = List.of(
                 ENABLED,
@@ -78,8 +76,7 @@ public class HighlightConfig implements IConfigHandler {
                 HINT_TEXT_OFFSET_X,
                 HINT_TEXT_OFFSET_Y,
                 HINT_TEXT_SCALE,
-                OPEN_CONFIG_GUI,
-                MARK_TARGET_BLOCK
+                OPEN_CONFIG_GUI
         );
     }
 
@@ -91,8 +88,6 @@ public class HighlightConfig implements IConfigHandler {
                 "仓储容器线框");
         public static final ConfigColor MATCHING_CONTAINER = new ConfigColor("matchingContainerColor", "#FFFFFF00",
                 "有可用物品的仓储箱线框");
-        public static final ConfigColor MANUAL_BLOCK = new ConfigColor("manualBlockColor", "#FFFF00FF",
-                "手动标记的方块线框");
         public static final ConfigColor SLOT_PUT = new ConfigColor("slotPutColor", "#8040FF40",
                 "背包里该放进投影容器的槽位背景");
         public static final ConfigColor SLOT_TAKE = new ConfigColor("slotTakeColor", "#6000FF00",
@@ -106,7 +101,6 @@ public class HighlightConfig implements IConfigHandler {
                 PROJECTION_CONTAINER,
                 STORAGE_CONTAINER,
                 MATCHING_CONTAINER,
-                MANUAL_BLOCK,
                 SLOT_PUT,
                 SLOT_TAKE,
                 SLOT_NBT_MISMATCH,
@@ -176,10 +170,6 @@ public class HighlightConfig implements IConfigHandler {
 
     public static Color4f getMatchingContainerColor() {
         return Colors.MATCHING_CONTAINER.getColor();
-    }
-
-    public static Color4f getManualBlockColor() {
-        return Colors.MANUAL_BLOCK.getColor();
     }
 
     public static int getSlotPutColor() {

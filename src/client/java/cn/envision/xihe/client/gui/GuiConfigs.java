@@ -31,7 +31,6 @@ public class GuiConfigs extends GuiConfigsBase {
     public List<ConfigOptionWrapper> getConfigs() {
         List<ConfigOptionWrapper> wrappers = new ArrayList<>();
         wrappers.addAll(ConfigOptionWrapper.createFor(HighlightConfig.Generic.OPTIONS));
-        wrappers.add(new ConfigOptionWrapper("颜色（格式 #AARRGGBB，含透明度）"));
         wrappers.addAll(ConfigOptionWrapper.createFor(HighlightConfig.Colors.OPTIONS));
         return wrappers;
     }

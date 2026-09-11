@@ -42,7 +42,6 @@ public final class HighlightState {
     private final Map<StackKey, Integer> remainingNeeded = new ConcurrentHashMap<>();
     private final Map<StackKey, Integer> projectionMissing = new ConcurrentHashMap<>();
     private final Map<BlockPos, Inventory> storageContainerCache = new ConcurrentHashMap<>();
-    private final Set<BlockPos> highlightedBlocks = ConcurrentHashMap.newKeySet();
     private final Set<BlockPos> storageContainers = ConcurrentHashMap.newKeySet();
     private final Set<BlockPos> matchingStorageContainers = ConcurrentHashMap.newKeySet();
     private final List<ItemStack> currentMissingItems = new CopyOnWriteArrayList<>();
@@ -75,10 +74,6 @@ public final class HighlightState {
     }
 
     // ---------- 渲染侧只读视图 ----------
-
-    public Set<BlockPos> getHighlightedBlocks() {
-        return Collections.unmodifiableSet(highlightedBlocks);
-    }
 
     public Set<BlockPos> getStorageContainers() {
         return Collections.unmodifiableSet(storageContainers);
@@ -121,14 +116,6 @@ public final class HighlightState {
             }
         }
         return false;
-    }
-
-    // ---------- 手动标记 ----------
-
-    public void addHighlightedBlock(BlockPos pos) {
-        if (pos != null) {
-            highlightedBlocks.add(pos.toImmutable());
-        }
     }
 
     // ---------- 匹配 ----------
@@ -417,7 +404,6 @@ public final class HighlightState {
     public void clearAll() {
         storageContainers.clear();
         storageContainerCache.clear();
-        highlightedBlocks.clear();
         matchingStorageContainers.clear();
         remainingNeeded.clear();
         projectionMissing.clear();

@@ -67,10 +67,6 @@ public final class BlockHighlighterRender {
         Vec3d cameraPos = context.camera().getPos();
         boolean throughWalls = HighlightConfig.isSeeThrough();
 
-        for (BlockPos highlightPos : state.getHighlightedBlocks()) {
-            renderOutline(cameraPos, highlightPos, HighlightConfig.getManualBlockColor(), throughWalls);
-        }
-
         if (isHoldingTrigger) {
             for (BlockPos storagePos : state.getStorageContainers()) {
                 renderOutline(cameraPos, storagePos, HighlightConfig.getStorageContainerColor(), throughWalls);
