@@ -1,6 +1,6 @@
 package cn.envision.xihe.client.handler;
 
-import cn.envision.xihe.client.BlockHighlighterRender;
+import cn.envision.xihe.client.HighlightState;
 import cn.envision.xihe.client.features.InventoryOverlay;
 import net.fabricmc.fabric.api.event.player.UseBlockCallback;
 import net.minecraft.entity.player.PlayerEntity;
@@ -11,20 +11,14 @@ import net.minecraft.util.hit.BlockHitResult;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.world.World;
 
-import java.util.ArrayDeque;
-import java.util.Queue;
+import static cn.envision.xihe.client.BlockHighlighterRender.isHoldingTriggerItem;
+import static cn.envision.xihe.client.config.HighlightConfig.isEnabled;
 
-import static cn.envision.xihe.client.BlockHighlighterRender.*;
-import static cn.envision.xihe.client.config.HighlightConfig.getSW;
-
-public abstract class InteractionHandler {
-    private static final Queue<InteractionHandler> queue = new ArrayDeque<>();
-    private final long tick;
-    private final BlockPos pos;
-
-    public InteractionHandler(BlockPos pos, long tick) {
-        this.pos = pos;
-        this.tick = tick;
+/**
+ * 处理高亮相关的方块交互：潜行右键清除标记，右键容器登记容器。
+ */
+public final class InteractionHandler {
+    private InteractionHandler() {
     }
 
     public static void setup() {
@@ -36,61 +30,33 @@ public abstract class InteractionHandler {
             return ActionResult.PASS;
         }
 
-        // 处理潜行右键清除标记
-        if (player.isSneaking() && hitResult.getType() == BlockHitResult.Type.BLOCK && isHoldingTriggerItem() && getSW()) {
+        HighlightState state = HighlightState.get();
+
+        // 潜行右键清除标记
+        if (player.isSneaking() && hitResult.getType() == BlockHitResult.Type.BLOCK && isHoldingTriggerItem() && isEnabled()) {
             BlockPos pos = hitResult.getBlockPos();
 
-            // 清除单个标记
-            if (BlockHighlighterRender.isStorageContainer(pos)) {
-                BlockHighlighterRender.removeStorageContainer(pos);
+            if (state.isStorageContainer(pos)) {
+                state.removeStorageContainer(pos);
                 player.sendMessage(Text.translatable("xihe.message.removed_storage",
                         pos.getX(), pos.getY(), pos.getZ()), true);
                 return ActionResult.SUCCESS;
             }
-            if (pos.equals(BlockHighlighterRender.getCurrentProjectionContainer())) {
-                removeProjectContainer();
+            if (pos.equals(state.getCurrentProjectionContainer())) {
+                state.removeProjectContainer();
                 player.sendMessage(Text.translatable("xihe.message.removed_schem",
                         pos.getX(), pos.getY(), pos.getZ()), true);
                 return ActionResult.SUCCESS;
             }
-        } /*else if (player.isSneaking() && hitResult.getType() == BlockHitResult.Type.MISS) {
-            // 潜行右键空气清除所有标记
-            BlockHighlighterRender.clearAll();
-            player.sendMessage(Text.translatable("xihe.message.cleared_all"), true);
-            return ActionResult.SUCCESS;
-        }*/
+        }
 
-        // 处理容器点击 - 设置临时处理坐标
-        if (!player.isSneaking() && getSW()) {
+        // 右键容器：登记为投影/仓储容器并记录本次处理坐标
+        if (!player.isSneaking() && isEnabled()) {
             InventoryOverlay.onContainerClick(hitResult);
-            // 新增：点击容器时设置临时处理坐标
-            BlockHighlighterRender.setTempProcessingPos(hitResult.getBlockPos());
-            BlockHighlighterRender.checkAndRemoveSatisfiedContainer(hitResult.getBlockPos());
+            state.setTempProcessingPos(hitResult.getBlockPos());
+            state.checkAndRemoveSatisfiedContainer(hitResult.getBlockPos());
         }
 
         return ActionResult.PASS;
-    }
-
-    public static boolean contains(BlockPos pos) {
-        for (InteractionHandler handler : queue) {
-            if (handler.pos.equals(pos)) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    public abstract void process();
-
-    public BlockPos getPos() {
-        return pos;
-    }
-
-    public long getTick() {
-        return tick;
-    }
-
-    public static Queue<InteractionHandler> getQueue() {
-        return queue;
     }
 }

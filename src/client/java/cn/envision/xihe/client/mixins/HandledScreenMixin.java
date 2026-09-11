@@ -1,11 +1,9 @@
 package cn.envision.xihe.client.mixins;
 
-import cn.envision.xihe.client.BlockHighlighterRender;
-import cn.envision.xihe.client.features.InventoryOverlay;
+import cn.envision.xihe.client.HighlightState;
 import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.gui.screen.ingame.HandledScreen;
 import net.minecraft.entity.player.PlayerInventory;
-import net.minecraft.inventory.SimpleInventory;
 import net.minecraft.item.ItemStack;
 import net.minecraft.screen.ScreenHandler;
 import net.minecraft.screen.slot.Slot;
@@ -18,9 +16,7 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
-import static cn.envision.xihe.client.BlockHighlighterRender.getCurrentProjectionContainer;
-import static cn.envision.xihe.client.BlockHighlighterRender.updateMatchingStorageContainers;
-import static cn.envision.xihe.client.config.HighlightConfig.getSW;
+import static cn.envision.xihe.client.config.HighlightConfig.isEnabled;
 import static cn.envision.xihe.client.features.InventoryOverlay.getCurrentContainerPos;
 
 @Mixin(HandledScreen.class)
@@ -38,8 +34,8 @@ public abstract class HandledScreenMixin<T extends ScreenHandler> {
         cancellable = false
     )
     private void onClose(CallbackInfo ci){
-        if (!getSW()) return;
-        updateMatchingStorageContainers();
+        if (!isEnabled()) return;
+        HighlightState.get().updateMatching();
     }
 
 
@@ -52,47 +48,35 @@ public abstract class HandledScreenMixin<T extends ScreenHandler> {
         if (slot.inventory instanceof PlayerInventory) {
             return;
         }
-        if (!getSW()) return;
+        if (!isEnabled()) return;
+
+        HighlightState state = HighlightState.get();
 
         // 缓存键用真实的容器坐标，临时坐标只作为兜底
         BlockPos containerPos = getCurrentContainerPos();
-        BlockPos clickedPos = BlockHighlighterRender.getAndClearTempProcessingPos();
+        BlockPos clickedPos = state.getAndClearTempProcessingPos();
         if (containerPos == null || BlockPos.ORIGIN.equals(containerPos)) {
             containerPos = clickedPos;
         }
-        BlockHighlighterRender.addSTORAGE_CONTAINER_CACHE(containerPos, slot.inventory);
+        state.cacheStorageInventory(containerPos, slot.inventory);
 
         // 只有标脏时才重算，不再逐槽全量重建
-        BlockHighlighterRender.ensureMatchingUpToDate();
+        state.ensureUpToDate();
 
         ItemStack currentStack = slot.getStack();
         if (currentStack.isEmpty()) {
             return;
         }
-        BlockPos currentProjectionContainer = getCurrentProjectionContainer();
+        BlockPos currentProjectionContainer = state.getCurrentProjectionContainer();
         BlockPos currentContainerPos = getCurrentContainerPos();
         if (currentProjectionContainer != null && currentContainerPos != null) {
             if (currentProjectionContainer.equals(currentContainerPos)) return;
 
             // 剩余需求表本身就只包含仍然缺少的物品
-            if (BlockHighlighterRender.getRemainingNeeded().getOrDefault(currentStack.getItem(), 0) > 0) {
+            if (state.getRemainingNeeded().getOrDefault(currentStack.getItem(), 0) > 0) {
                 drawFoundItemHighlight(context, slot);
             }
         }
-
-        // 关键修改：使用专门的临时处理坐标，读取后自动清空
-
-
-        // 如果获取到了有效的临时处理坐标，则进行处理
-        //if (clickedPos != null && !clickedPos.equals(BlockPos.ORIGIN)) {
-        //    if (found) {
-        //        if (!BlockHighlighterRender.getTempHighlightedBlocks().contains(clickedPos)) {
-        //            BlockHighlighterRender.addTempHighlightedBlock(clickedPos);
-        //        }
-        //    } else {
-        //        BlockHighlighterRender.getTempHighlightedBlocks().remove(clickedPos);
-        //    }
-        //}
     }
 
     @Unique
@@ -102,7 +86,5 @@ public abstract class HandledScreenMixin<T extends ScreenHandler> {
         int x = slot.x + 1;
         int y = slot.y + 1;
         context.fill(x - 1, y - 1, x + slotSize - 1, y + slotSize - 1, 0x6000FF00);
-        //context.fill(x - 1, y - 1, x + slotSize/8 + 1, y + slotSize + 1, 0xA00000FF);
-        //context.fill(x,  y, x + slotSize/4, y + slotSize/4, 0xFAFF0000);
     }
 }

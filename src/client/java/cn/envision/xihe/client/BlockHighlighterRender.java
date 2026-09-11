@@ -1,432 +1,114 @@
 package cn.envision.xihe.client;
 
 import cn.envision.xihe.client.config.HighlightConfig;
-import cn.envision.xihe.client.features.PlacementContainerAccess;
 import com.mojang.blaze3d.pipeline.RenderPipeline;
 import com.mojang.blaze3d.vertex.VertexFormat;
-import com.mojang.logging.LogUtils;
-
-import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientChunkEvents;
-import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientWorldEvents;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents;
 import net.fabricmc.fabric.api.client.rendering.v1.WorldRenderContext;
 import net.fabricmc.fabric.api.client.rendering.v1.WorldRenderEvents;
-import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
-import net.minecraft.block.BlockState;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gl.RenderPipelines;
 import net.minecraft.client.gl.UniformType;
 import net.minecraft.client.network.ClientPlayNetworkHandler;
 import net.minecraft.client.render.*;
 import net.minecraft.client.util.math.MatrixStack;
-import net.minecraft.client.world.ClientWorld;
-import net.minecraft.entity.player.PlayerEntity;
-import net.minecraft.inventory.Inventory;
-import net.minecraft.inventory.SimpleInventory;
-import net.minecraft.item.Item;
-import net.minecraft.item.ItemStack;
 import net.minecraft.util.Identifier;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.Vec3d;
-import net.minecraft.world.World;
-import net.minecraft.world.WorldEvents;
 import org.joml.Matrix4f;
-import org.slf4j.Logger;
 
-import javax.naming.Context;
-import java.util.*;
+import java.util.Map;
+import java.util.OptionalDouble;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.CopyOnWriteArrayList;
 
-import static cn.envision.xihe.client.config.HighlightConfig.getSW;
-import static cn.envision.xihe.client.config.HighlightConfig.setSW;
-
-public class BlockHighlighterRender {
-    // 状态会被客户端线程（右击/命令）和渲染线程同时访问，统一使用并发容器
-    private static final Map<Item, Integer> remainingNeeded = new ConcurrentHashMap<>();
-    // 基础常量
-    private static final Set<BlockPos> TEMP_HIGHLIGHTED_BLOCKS = ConcurrentHashMap.newKeySet();
-    private static final Set<BlockPos> HIGHLIGHTED_BLOCKS = ConcurrentHashMap.newKeySet();
-    private static final Set<BlockPos> STORAGE_CONTAINERS = ConcurrentHashMap.newKeySet();
-
-    private static final Map<BlockPos, Inventory> STORAGE_CONTAINER_CACHE = new ConcurrentHashMap<>();
-    private static volatile BlockPos currentProjectionContainer = null;
-    private static final List<ItemStack> currentMissingItems = new CopyOnWriteArrayList<>();
-    private static final Logger LOGGER = LogUtils.getLogger();
-    private static final String MOD_TAG = "[XiheContainerHighlight]";
-    private static final Set<BlockPos> MATCHING_STORAGE_CONTAINERS = ConcurrentHashMap.newKeySet();
-    // 匹配结果脏标记：标脏后每帧最多重算一次
-    private static volatile boolean matchingDirty = true;
-
+/**
+ * 高亮方块的线框渲染与事件注册，状态与仓储匹配逻辑见 {@link HighlightState}。
+ */
+public final class BlockHighlighterRender {
     // 颜色常量（ARGB格式）
     private static final int COLOR_PROJECTION = 0xFF00FF00; // 绿色
     private static final int COLOR_STORAGE = 0xFF0000FF;    // 蓝色
     private static final int COLOR_MATCHING = 0xFFFFFF00;   // 黄色
     private static final int COLOR_MANUAL = 0xFFFF00FF;     // 品红（/highlightblock 手动标记）
+
+    private static final float LINE_WIDTH_NORMAL = 2.0F;
+    private static final float LINE_WIDTH_EMPHASIS = 2.5F;
+
     // 超出该距离（方块）的线框不再绘制
     private static final double MAX_RENDER_DISTANCE_SQ = 64.0D * 64.0D;
-    private static volatile BlockPos tempProcessingPos = null;
+
+    private static RenderPipeline blockHighlightPipeline;
+    // 每种线宽一个 RenderLayer，线宽参数才能真正生效
+    private static final Map<Float, RenderLayer> HIGHLIGHT_LAYERS = new ConcurrentHashMap<>();
+
+    private BlockHighlighterRender() {
+    }
+
     public static void setup() {
-        // 注册世界渲染事件
         WorldRenderEvents.AFTER_TRANSLUCENT.register(BlockHighlighterRender::onRender);
-        ClientPlayConnectionEvents.DISCONNECT.register(BlockHighlighterRender::clearAll);
-        //.register(BlockHighlighterRender::clearAll);
-        //WorldRenderEvents.END.register(BlockHighlighterRender::clearAll);
-        // LOGGER.info("{} 容器高亮系统初始化完成", MOD_TAG);
-
+        ClientPlayConnectionEvents.DISCONNECT.register(BlockHighlighterRender::onDisconnect);
     }
 
-
-    public static Map<Item, Integer> getRemainingNeeded() {
-        return remainingNeeded;
+    private static void onDisconnect(ClientPlayNetworkHandler clientPlayNetworkHandler, MinecraftClient minecraftClient) {
+        HighlightConfig.setEnabled(false);
+        HighlightState.get().clearAll();
     }
 
-    public static void markMatchingDirty() {
-        matchingDirty = true;
-    }
-
-    // 渲染线程每帧调用，只有标脏时才真正重算
-    public static void ensureMatchingUpToDate() {
-        if (matchingDirty) {
-            updateMatchingStorageContainers();
-        }
-    }
-
-    public static void addSTORAGE_CONTAINER_CACHE(BlockPos pos, Inventory inv){
-        if (pos == null || inv == null) {
-            return;
-        }
-        if (STORAGE_CONTAINER_CACHE.put(pos.toImmutable(), inv) != inv) {
-            markMatchingDirty();
-        }
-    }
-    // 新增：设置临时处理坐标
-    public static void setTempProcessingPos(BlockPos pos) {
-        tempProcessingPos = pos != null ? pos.toImmutable() : null;
-    }
-    // BlockHighlighterRender.java
-
-    public static void updateMatchingStorageContainers() {
-        matchingDirty = false;
-        MATCHING_STORAGE_CONTAINERS.clear();
-        remainingNeeded.clear();
-        if (currentProjectionContainer == null || currentMissingItems.isEmpty()) return;
-
-        // 1. 先统计玩家背包里已有的物品数量
-        PlayerEntity player = MinecraftClient.getInstance().player;
-        Map<Item, Integer> playerInventoryCount = new HashMap<>();
-        if (player != null) {
-            for (int i = 0; i < player.getInventory().size(); i++) {
-                ItemStack stack = player.getInventory().getStack(i);
-                if (!stack.isEmpty()) {
-                    playerInventoryCount.merge(stack.getItem(), stack.getCount(), Integer::sum);
-                }
-            }
-        }
-
-        // 2. 统计投影容器里已有的物品数量
-        Map<Item, Integer> projectionContainerCount = new HashMap<>();
-        Inventory projectionInv = STORAGE_CONTAINER_CACHE.get(currentProjectionContainer);
-        if (projectionInv != null) {
-            for (int i = 0; i < projectionInv.size(); i++) {
-                ItemStack stack = projectionInv.getStack(i);
-                if (!stack.isEmpty()) {
-                    projectionContainerCount.merge(stack.getItem(), stack.getCount(), Integer::sum);
-                }
-            }
-        }
-
-        // 3. 先把同一物品在多个槽位的需求合并，再整体扣除背包和投影容器里的数量
-        Map<Item, Integer> neededTotal = new HashMap<>();
-        for (ItemStack missing : currentMissingItems) {
-            if (missing.isEmpty()) {
-                continue;
-            }
-            neededTotal.merge(missing.getItem(), missing.getCount(), Integer::sum);
-        }
-
-        for (Map.Entry<Item, Integer> entry : neededTotal.entrySet()) {
-            int remaining = entry.getValue()
-                    - playerInventoryCount.getOrDefault(entry.getKey(), 0)
-                    - projectionContainerCount.getOrDefault(entry.getKey(), 0);
-
-            if (remaining > 0) {
-                remainingNeeded.put(entry.getKey(), remaining);
-            }
-        }
-
-        // 4. 如果背包和投影容器加起来已经全部满足，直接返回，不高亮任何仓储箱
-        if (remainingNeeded.isEmpty()) {
-            return;
-        }
-
-        // 5. 检查仓储箱，只高亮包含"仍然缺少"物品的仓储箱
-        for (BlockPos storagePos : STORAGE_CONTAINERS) {
-            Inventory storageInv = STORAGE_CONTAINER_CACHE.get(storagePos);
-            if (storageInv == null) continue;
-
-            boolean hasMatchingItem = false;
-            for (int i = 0; i < storageInv.size(); i++) {
-                ItemStack storedStack = storageInv.getStack(i);
-                if (!storedStack.isEmpty() && remainingNeeded.containsKey(storedStack.getItem())) {
-                    hasMatchingItem = true;
-                    break;
-                }
-            }
-
-            if (hasMatchingItem) {
-                MATCHING_STORAGE_CONTAINERS.add(storagePos);
-            }
-        }
-    }
-
-    // 新增：获取并清空临时处理坐标（读取后自动清除）
-    public static BlockPos getAndClearTempProcessingPos() {
-        BlockPos pos = tempProcessingPos;
-        tempProcessingPos = null; // 读取后立即清空，防止被其他界面处理
-        return pos;
-    }
-    // 处理容器点击事件
-
-    public static void clearTempHighlightedBlocks() {
-        TEMP_HIGHLIGHTED_BLOCKS.clear();
-    }
-
-    public static Set<BlockPos> getTempHighlightedBlocks() {
-        return TEMP_HIGHLIGHTED_BLOCKS;
-    }
-
-    // 手动标记的高亮方块（/highlightblock）
-    public static void addHighlightedBlock(BlockPos pos) {
-        if (pos != null) {
-            HIGHLIGHTED_BLOCKS.add(pos.toImmutable());
-        }
-    }
-
-    public static Set<BlockPos> getHighlightedBlocks() {
-        return Collections.unmodifiableSet(HIGHLIGHTED_BLOCKS);
-    }
-    // 检查是否为仓储容器
-    public static boolean isStorageContainer(BlockPos pos) {
-        return STORAGE_CONTAINERS.contains(pos.toImmutable());
-    }
-
-    // 设置投影容器
-    public static boolean setCurrentProjectionContainer(BlockPos newPos) {
-        if (newPos == null) {
+    // 检查是否手持触发物品
+    public static boolean isHoldingTriggerItem() {
+        MinecraftClient client = MinecraftClient.getInstance();
+        if (client.player == null) {
             return false;
         }
-
-        BlockPos immutableNewPos = newPos.toImmutable();
-        World world = MinecraftClient.getInstance().world;
-        if (world == null) return false;
-        // 原则上弃用，非servux等协议获取，此处纯作为虚拟方块，缺的方块默认成全部了，能用就行)
-        BlockState state = world.getBlockState(immutableNewPos);
-        Optional<SimpleInventory> schematicInv = PlacementContainerAccess.getSchematicInventory(immutableNewPos, state);
-
-        if (schematicInv.isEmpty() || isInventoryEmpty(schematicInv.get())) {
-            //LOGGER.warn("{} 投影容器[{}]为空或无法读取", MOD_TAG, immutableNewPos.toShortString());
-            return false;
-        }
-
-        // 投影容器只由 currentProjectionContainer 跟踪，不再混入手动标记集合
-        currentProjectionContainer = immutableNewPos;
-        //LOGGER.info("{} 已设置投影容器：{}", MOD_TAG, immutableNewPos.toShortString());
-        //logInventoryContent("投影容器", immutableNewPos, schematicInv.get());
-
-        // 重新计算缺失物品
-        currentMissingItems.clear();
-        //currentMissingItems.addAll(findMissingItems(immutableNewPos, schematicInv.get()));
-        /*Inventory inventory = schematicInv.get();
-        List<ItemStack> missing = new ArrayList<>();
-        for (int i = 0; i < inventory.size(); i++) {
-            ItemStack stack = inventory.getStack(i);
-            if (!currentMissingItems.contains(stack))
-                missing.add(stack);
-        }
-        currentMissingItems.addAll(missing);*/
-
-        // 安全方法
-        Inventory inventory = schematicInv.get();
-        for (int i = 0; i < inventory.size(); i++) {
-            ItemStack stack = inventory.getStack(i);
-            if (!stack.isEmpty()) {
-                currentMissingItems.add(stack.copy()); // 使用 copy() 是个好习惯
-            }
-        }
-
-        markMatchingDirty();
-        return true;
-    }
-
-    // 检查库存是否为空
-    private static boolean isInventoryEmpty(Inventory inventory) {
-        for (int i = 0; i < inventory.size(); i++) {
-            if (!inventory.getStack(i).isEmpty()) {
-                return false;
-            }
-        }
-        return true;
-    }
-
-    // 获取缓存的仓储容器
-    public static Inventory getCachedStorageInventory(BlockPos pos) {
-        BlockPos immutablePos = pos.toImmutable();
-        return STORAGE_CONTAINER_CACHE.getOrDefault(immutablePos, null);
-    }
-
-    // 添加仓储容器
-    public static void addStorageContainer(BlockPos pos) {
-        if (STORAGE_CONTAINERS.add(pos.toImmutable())) {
-            markMatchingDirty();
-        }
-    }
-
-    // 移除仓储容器
-    public static void removeStorageContainer(BlockPos pos) {
-        BlockPos immutablePos = pos.toImmutable();
-        boolean changed = STORAGE_CONTAINERS.remove(immutablePos);
-        changed |= STORAGE_CONTAINER_CACHE.remove(immutablePos) != null;
-        if (changed) {
-            markMatchingDirty();
-        }
-        //LOGGER.debug("{} 移除仓储容器及缓存：{}", MOD_TAG, immutablePos.toShortString());
-    }
-    public static void removeProjectContainer() {
-        currentProjectionContainer = null;
-        currentMissingItems.clear();
-        markMatchingDirty();
-    }
-    public static void removeTempHighlightedBlock(BlockPos pos) {
-        if (pos != null) {
-            TEMP_HIGHLIGHTED_BLOCKS.remove(pos.toImmutable());
-        }
-    }
-    // 清除所有数据
-    public static void clearAll() {
-        STORAGE_CONTAINERS.clear();
-        STORAGE_CONTAINER_CACHE.clear();
-        HIGHLIGHTED_BLOCKS.clear();
-        TEMP_HIGHLIGHTED_BLOCKS.clear();
-        MATCHING_STORAGE_CONTAINERS.clear();
-        remainingNeeded.clear();
-        currentMissingItems.clear();
-        currentProjectionContainer = null;
-        tempProcessingPos = null;
-        matchingDirty = false;
-        RenderPhaseCache.clearCache();
-        //LOGGER.info("{} 清除所有仓储容器及缓存", MOD_TAG);
-    }
-    private static void clearAll(ClientPlayNetworkHandler clientPlayNetworkHandler, MinecraftClient minecraftClient) {
-        setSW(false);
-        clearAll();
+        return client.player.getMainHandStack().getItem() == HighlightConfig.getTriggerItem()
+                || client.player.getOffHandStack().getItem() == HighlightConfig.getTriggerItem();
     }
 
     // 世界渲染回调
     private static void onRender(WorldRenderContext context) {
-        if (!getSW()) return;
+        if (!HighlightConfig.isEnabled()) {
+            return;
+        }
         MinecraftClient client = MinecraftClient.getInstance();
         if (client.player == null || client.world == null) {
             return;
         }
 
-        ensureMatchingUpToDate();
+        HighlightState state = HighlightState.get();
+        state.ensureUpToDate();
 
         boolean isHoldingTrigger = isHoldingTriggerItem();
         Vec3d cameraPos = context.camera().getPos();
         MatrixStack matrices = context.matrixStack();
-        BufferBuilderStorage bufferBuilders = MinecraftClient.getInstance().getBufferBuilders();
+        BufferBuilderStorage bufferBuilders = client.getBufferBuilders();
         VertexConsumerProvider.Immediate immediate = bufferBuilders.getEntityVertexConsumers();
 
-        for (BlockPos highlightPos : HIGHLIGHTED_BLOCKS) {
+        for (BlockPos highlightPos : state.getHighlightedBlocks()) {
             if (isWithinRenderDistance(cameraPos, highlightPos)) {
-                renderBlockWireframe(matrices, immediate, cameraPos, highlightPos, COLOR_MANUAL, 2.0F);
+                renderBlockWireframe(matrices, immediate, cameraPos, highlightPos, COLOR_MANUAL, LINE_WIDTH_NORMAL);
             }
         }
 
         if (isHoldingTrigger) {
-            for (BlockPos storagePos : STORAGE_CONTAINERS) {
+            for (BlockPos storagePos : state.getStorageContainers()) {
                 if (isWithinRenderDistance(cameraPos, storagePos)) {
-                    renderBlockWireframe(matrices, immediate, cameraPos, storagePos, COLOR_STORAGE, 2.0F);
+                    renderBlockWireframe(matrices, immediate, cameraPos, storagePos, COLOR_STORAGE, LINE_WIDTH_NORMAL);
                 }
             }
-            if (currentProjectionContainer != null) {
-                renderBlockWireframe(matrices, immediate, cameraPos, currentProjectionContainer, COLOR_PROJECTION, 2.5F);
+            BlockPos projectionContainer = state.getCurrentProjectionContainer();
+            if (projectionContainer != null) {
+                renderBlockWireframe(matrices, immediate, cameraPos, projectionContainer, COLOR_PROJECTION, LINE_WIDTH_EMPHASIS);
             }
-
         } else {
-            /*if (currentProjectionContainer != null) {
-                renderBlockWireframe(matrices, immediate, cameraPos, currentProjectionContainer, COLOR_PROJECTION, 2.5F);
-            }*/
-            for (BlockPos matchingPos : MATCHING_STORAGE_CONTAINERS) {
+            for (BlockPos matchingPos : state.getMatchingStorageContainers()) {
                 if (isWithinRenderDistance(cameraPos, matchingPos)) {
-                    renderBlockWireframe(matrices, immediate, cameraPos, matchingPos, COLOR_MATCHING, 2.5F);
+                    renderBlockWireframe(matrices, immediate, cameraPos, matchingPos, COLOR_MATCHING, LINE_WIDTH_EMPHASIS);
                 }
             }
-            // 渲染匹配的仓储容器（黄色）
-            /*if (currentProjectionContainer != null && !STORAGE_CONTAINERS.isEmpty()) {
-                Set<BlockPos> matchedStorage = findMatchingStorageContainers(currentProjectionContainer);
-                for (BlockPos storagePos : matchedStorage) {
-                    renderBlockWireframe(matrices, immediate, cameraPos, storagePos, COLOR_MATCHING, 2.5F);
-                }
-            }
-            // 重新实现：渲染包含缺失物品的仓储容器（黄色）
-            if (currentProjectionContainer != null && !STORAGE_CONTAINERS.isEmpty() && !currentMissingItems.isEmpty()) {
-                for (BlockPos storagePos : STORAGE_CONTAINERS) {
-                    Inventory storageInv = STORAGE_CONTAINER_CACHE.get(storagePos);
-                    if (storageInv == null) continue;
-
-                    // 检查仓储容器中是否包含任意缺失物品
-                    boolean hasMissingItem = false;
-                    for (ItemStack missingItem : currentMissingItems) {
-                        for (int i = 0; i < storageInv.size(); i++) {
-                            ItemStack storedItem = storageInv.getStack(i);
-                            if (!storedItem.isEmpty() && ItemStack.areItemsEqual(storedItem, missingItem)) {
-                                hasMissingItem = true;
-                                break;
-                            }
-                        }
-                        if (hasMissingItem) break;
-                    }
-
-                    if (hasMissingItem) {
-                        renderBlockWireframe(matrices, immediate, cameraPos, storagePos, COLOR_MATCHING, 2.5F);
-                    }
-                }
-            }*/
-            /*for (BlockPos storagePos : getTempHighlightedBlocks()) {
-                if(storagePos != currentProjectionContainer)
-                    renderBlockWireframe(matrices, immediate, cameraPos, storagePos, COLOR_MATCHING, 2.5F);
-            }*/
         }
 
         immediate.draw(RenderLayer.LINES);
     }
-    public static BlockPos getCurrentProjectionContainer() {
-        return currentProjectionContainer;
-    }
-    // 日志输出库存内容
-    private static void logInventoryContent(String containerType, BlockPos pos, Inventory inventory) {
-        List<String> itemList = new ArrayList<>();
-        for (int i = 0; i < inventory.size(); i++) {
-            ItemStack stack = inventory.getStack(i);
-            if (!stack.isEmpty()) {
-                String itemName = stack.getItem().getName(stack).getString();
-                itemList.add(String.format("%s x%d", itemName, stack.getCount()));
-            }
-        }
-        if (itemList.isEmpty()) {
-            //LOGGER.info("{} {}[{}] 内容为空 (类型: {})",
-             //       MOD_TAG, containerType, pos.toShortString(), inventory.getClass().getSimpleName());
-        } else {
-            //LOGGER.info("{} {}[{}] 内容: {} (类型: {})",
-             //       MOD_TAG, containerType, pos.toShortString(),
-             //       String.join(", ", itemList), inventory.getClass().getSimpleName());
-        }
-    }
-    private static RenderPipeline blockHighlightPipeline;
-    // 每种线宽一个 RenderLayer，线宽参数才能真正生效
-    private static final Map<Float, RenderLayer> HIGHLIGHT_LAYERS = new ConcurrentHashMap<>();
 
     private static boolean isWithinRenderDistance(Vec3d cameraPos, BlockPos pos) {
         return cameraPos.squaredDistanceTo(Vec3d.ofCenter(pos)) <= MAX_RENDER_DISTANCE_SQ;
@@ -452,7 +134,7 @@ public class BlockHighlighterRender {
                     .build();
         }
 
-        RenderPhase.LineWidth lineWidthPhase = RenderPhaseCache.getLineWidthPhase(lineWidth);
+        RenderPhase.LineWidth lineWidthPhase = new RenderPhase.LineWidth(OptionalDouble.of(lineWidth));
         RenderLayer.MultiPhaseParameters phaseParams = RenderLayer.MultiPhaseParameters.builder()
                 .lineWidth(lineWidthPhase)
                 .texture(RenderPhase.NO_TEXTURE)
@@ -566,93 +248,5 @@ public class BlockHighlighterRender {
                                  float r, float g, float b, float a) {
         consumer.vertex(matrix, x1, y1, z1).color(r, g, b, a).normal(0, 1, 0);
         consumer.vertex(matrix, x2, y2, z2).color(r, g, b, a).normal(0, 1, 0);
-    }
-
-    // 查找缺失物品
-    public static List<ItemStack> findMissingItems(BlockPos projectionPos, SimpleInventory schematicInv) {
-        List<ItemStack> missing = new ArrayList<>();
-        if (isInventoryEmpty(schematicInv)) {
-            return missing;
-        }
-
-        // 先把所有仓储容器按物品汇总一次，避免逐个需求重复扫描
-        Map<Item, Integer> storageTotals = new HashMap<>();
-        for (Inventory storageInv : STORAGE_CONTAINER_CACHE.values()) {
-            if (storageInv == null) {
-                continue;
-            }
-            for (int i = 0; i < storageInv.size(); i++) {
-                ItemStack stored = storageInv.getStack(i);
-                if (!stored.isEmpty()) {
-                    storageTotals.merge(stored.getItem(), stored.getCount(), Integer::sum);
-                }
-            }
-        }
-
-        for (int i = 0; i < schematicInv.size(); i++) {
-            ItemStack required = schematicInv.getStack(i);
-            if (required.isEmpty()) {
-                continue;
-            }
-            if (storageTotals.getOrDefault(required.getItem(), 0) < required.getCount()) {
-                missing.add(required.copy());
-            }
-        }
-        return missing;
-    }
-
-    // 检查是否手持触发物品
-    public static boolean isHoldingTriggerItem() {
-        MinecraftClient client = MinecraftClient.getInstance();
-        if (client.player == null) return false;
-        return client.player.getMainHandStack().getItem() == HighlightConfig.getTriggerItem() ||
-                client.player.getOffHandStack().getItem() == HighlightConfig.getTriggerItem();
-    }
-
-    // 获取当前缺失物品列表
-    public static List<ItemStack> getCurrentMissingItems() {
-        return currentMissingItems;
-    }
-
-
-    public static void checkAndRemoveSatisfiedContainer(BlockPos storagePos) {
-        if (storagePos == null || currentProjectionContainer == null || currentMissingItems.isEmpty()) {
-            return;
-        }
-
-        BlockPos immutableStoragePos = storagePos.toImmutable();
-        Inventory storageInv = STORAGE_CONTAINER_CACHE.get(immutableStoragePos);
-        if (storageInv == null) {
-            return;
-        }
-
-        // 遍历所有缺失的物品，检查这个仓储容器是否已经满足了所有需求
-        boolean isFullySatisfied = true;
-        for (ItemStack missingStack : currentMissingItems) {
-            int neededCount = missingStack.getCount();
-            int foundCount = 0;
-
-            // 计算这个仓储容器里有多少我们需要的物品
-            for (int i = 0; i < storageInv.size(); i++) {
-                ItemStack storedStack = storageInv.getStack(i);
-                if (ItemStack.areItemsEqual(storedStack, missingStack)) {
-                    foundCount += storedStack.getCount();
-                }
-            }
-
-            // 如果这个仓储容器里的数量不够，说明还没满足
-            if (foundCount < neededCount) {
-                isFullySatisfied = false;
-                break;
-            }
-        }
-
-        // 只有当这个仓储箱里的物品完全满足了投影需求时，才从仓储区名单中移除它
-        if (isFullySatisfied) {
-            STORAGE_CONTAINERS.remove(immutableStoragePos);
-            STORAGE_CONTAINER_CACHE.remove(immutableStoragePos);
-            markMatchingDirty(); // 下一帧重算匹配并刷新高亮
-            // LOGGER.info("{} 仓储容器[{}]物品已齐全，已移除高亮", MOD_TAG, immutableStoragePos.toShortString());
-        }
     }
 }

@@ -16,8 +16,8 @@ import com.mojang.brigadier.arguments.StringArgumentType;
 import cn.envision.xihe.client.config.HighlightConfig;
 import cn.envision.xihe.client.handler.InteractionHandler;
 
-import static cn.envision.xihe.client.config.HighlightConfig.getSW;
-import static cn.envision.xihe.client.config.HighlightConfig.setSW;
+import static cn.envision.xihe.client.config.HighlightConfig.isEnabled;
+import static cn.envision.xihe.client.config.HighlightConfig.setEnabled;
 import static net.fabricmc.fabric.api.client.command.v2.ClientCommandManager.argument;
 import static net.fabricmc.fabric.api.client.command.v2.ClientCommandManager.literal;
 
@@ -47,36 +47,35 @@ public class TweakerXiheClient implements ClientModInitializer {
                                                     return 0;
                                                 }
 
-                                                BlockHighlighterRender.addHighlightedBlock(pos);
+                                                HighlightState.get().addHighlightedBlock(pos);
                                                 context.getSource().sendFeedback(Text.literal("Set " + pos.toShortString() + "  Highlight"));
                                                 return 1;
                                             }))))
-            // 新增：清除所有高亮
                     .then(literal("clear")
                             .executes(context -> {
                                 // 清除所有相关高亮数据
-                                BlockHighlighterRender.clearAll();
+                                HighlightState.get().clearAll();
 
                                 context.getSource().sendFeedback(Text.literal("Clear All Highlight Block!"));
                                 return 1;
                             })).
                     then(literal("start")
                             .executes(context -> {
-                                if (getSW()) {
+                                if (isEnabled()) {
                                     context.getSource().sendError(Text.literal("Auto Highlight Block Started!"));
                                     return 0;
                                 }
-                                setSW(true);
+                                setEnabled(true);
                                 context.getSource().sendFeedback(Text.literal("Starting Auto Highlight Block."));
                                 return 1;
                             }))
                     .then(literal("stop")
                             .executes(context -> {
-                                if (!getSW()) {
+                                if (!isEnabled()) {
                                     context.getSource().sendError(Text.literal("Auto Highlight Block Stopped!"));
                                     return 0;
                                 }
-                                setSW(false);
+                                setEnabled(false);
                                 context.getSource().sendFeedback(Text.literal("Stopping Auto Highlight Block."));
                                 return 1;
                             })));
