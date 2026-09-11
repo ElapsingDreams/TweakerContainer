@@ -38,15 +38,18 @@ public class InventoryOverlay {
         return instance;
     }
 
-    public static void onContainerClick(BlockHitResult hitResult) {
+    /**
+     * @return 该方块是否已登记为投影容器或仓储容器
+     */
+    public static boolean onContainerClick(BlockHitResult hitResult) {
         if (!isEnabled()) {
-            return;
+            return false;
         }
 
         BlockPos pos = hitResult.getBlockPos();
         World world = WorldUtils.getBestWorld(MinecraftClient.getInstance());
         if (world == null) {
-            return;
+            return false;
         }
 
         BlockState state = world.getBlockState(pos);
@@ -54,7 +57,7 @@ public class InventoryOverlay {
 
         // 检查是否是有效的容器
         if (inventory.isEmpty() || !(inventory.get() instanceof ScreenHandlerFactory)) {
-            return;
+            return false;
         }
 
         HighlightState highlightState = HighlightState.get();
@@ -70,6 +73,7 @@ public class InventoryOverlay {
             highlightState.addStorageContainer(pos);
         }
         getInstance().currentContainerPos = pos;
+        return true;
     }
 
     public static void onContainerClose(BlockPos pos) {

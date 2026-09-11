@@ -52,15 +52,13 @@ public abstract class HandledScreenMixin<T extends ScreenHandler> {
 
         HighlightState state = HighlightState.get();
 
-        // 缓存键用真实的容器坐标，临时坐标只作为兜底
-        BlockPos containerPos = getCurrentContainerPos();
+        // 只在右击容器后缓存容器内容；玩家背包的合成格等非容器槽位不写入缓存
         BlockPos clickedPos = state.getAndClearTempProcessingPos();
-        if (containerPos == null || BlockPos.ORIGIN.equals(containerPos)) {
-            containerPos = clickedPos;
+        if (clickedPos != null) {
+            state.cacheStorageInventory(clickedPos, slot.inventory);
         }
-        state.cacheStorageInventory(containerPos, slot.inventory);
 
-        // 只有标脏时才重算，不再逐槽全量重建
+        // 标脏或超过刷新间隔时才重算，不再逐槽全量重建
         state.ensureUpToDate();
 
         ItemStack currentStack = slot.getStack();

@@ -40,6 +40,9 @@ public final class HighlightState {
     private volatile BlockPos tempProcessingPos;
     // 匹配结果脏标记：标脏后每帧最多重算一次
     private volatile boolean dirty = true;
+    // 兜底刷新间隔（毫秒）
+    private static final long REFRESH_INTERVAL_MS = 250L;
+    private long lastUpdateMs;
 
     private HighlightState() {
     }
@@ -85,12 +88,23 @@ public final class HighlightState {
     }
 
     /**
-     * 渲染线程每帧调用，只有标脏时才真正重算。
+     * 渲染线程每帧调用：标脏或距上次重算超过刷新间隔时才真正重算。
+     * <p>
+     * 玩家背包内容变化不会标脏，因此加一道时间兜底，避免结果长期停留在旧值。
      */
     public void ensureUpToDate() {
-        if (dirty) {
+        if (dirty || refreshDue()) {
             updateMatching();
         }
+    }
+
+    private boolean refreshDue() {
+        long now = System.currentTimeMillis();
+        if (now - lastUpdateMs < REFRESH_INTERVAL_MS) {
+            return false;
+        }
+        lastUpdateMs = now;
+        return true;
     }
 
     public void updateMatching() {

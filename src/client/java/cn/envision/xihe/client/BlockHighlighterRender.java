@@ -138,7 +138,7 @@ public final class BlockHighlighterRender {
                     // NO_DEPTH_TEST 的线框会穿透方块，默认关闭，用 /highlightblock depth 切换
                     .withDepthTestFunction(HighlightConfig.isSeeThrough()
                             ? DepthTestFunction.NO_DEPTH_TEST
-                            : DepthTestFunction.LEQUAL)
+                            : DepthTestFunction.LEQUAL_DEPTH_TEST)//LEQUAL
                     .withDepthWrite(false)
                     .withCull(false)
                     .withoutBlend()

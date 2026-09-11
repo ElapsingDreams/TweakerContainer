@@ -51,8 +51,7 @@ public final class InteractionHandler {
         }
 
         // 右键容器：登记为投影/仓储容器并记录本次处理坐标
-        if (!player.isSneaking() && isEnabled()) {
-            InventoryOverlay.onContainerClick(hitResult);
+        if (!player.isSneaking() && isEnabled() && InventoryOverlay.onContainerClick(hitResult)) {
             state.setTempProcessingPos(hitResult.getBlockPos());
             state.checkAndRemoveSatisfiedContainer(hitResult.getBlockPos());
         }
