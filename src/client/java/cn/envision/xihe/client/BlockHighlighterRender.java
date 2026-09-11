@@ -133,12 +133,14 @@ public final class BlockHighlighterRender {
             return;
         }
 
-        float x1 = Math.min(pos1.getX(), pos2.getX()) - EXPAND;
-        float y1 = Math.min(pos1.getY(), pos2.getY()) - EXPAND;
-        float z1 = Math.min(pos1.getZ(), pos2.getZ()) - EXPAND;
-        float x2 = Math.max(pos1.getX(), pos2.getX()) + 1.0F + EXPAND;
-        float y2 = Math.max(pos1.getY(), pos2.getY()) + 1.0F + EXPAND;
-        float z2 = Math.max(pos1.getZ(), pos2.getZ()) + 1.0F + EXPAND;
+        // malilib 的批处理顶点写入器输出的是相机相对坐标（renderBlockOutline 内部同样先减去相机位置），
+        // 这里必须自己减，否则框会被画到别处、看上去像完全没画
+        float x1 = (float) (Math.min(pos1.getX(), pos2.getX()) - EXPAND - cameraPos.x);
+        float y1 = (float) (Math.min(pos1.getY(), pos2.getY()) - EXPAND - cameraPos.y);
+        float z1 = (float) (Math.min(pos1.getZ(), pos2.getZ()) - EXPAND - cameraPos.z);
+        float x2 = (float) (Math.max(pos1.getX(), pos2.getX()) + 1.0D + EXPAND - cameraPos.x);
+        float y2 = (float) (Math.max(pos1.getY(), pos2.getY()) + 1.0D + EXPAND - cameraPos.y);
+        float z2 = (float) (Math.max(pos1.getZ(), pos2.getZ()) + 1.0D + EXPAND - cameraPos.z);
 
         RenderPipeline pipeline = throughWalls
                 ? MaLiLibPipelines.DEBUG_LINES_MASA_SIMPLE_NO_DEPTH_NO_CULL
