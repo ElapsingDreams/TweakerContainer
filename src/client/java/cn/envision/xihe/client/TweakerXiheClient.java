@@ -9,6 +9,8 @@ import fi.dy.masa.malilib.gui.GuiBase;
 import fi.dy.masa.malilib.hotkeys.IKeybindManager;
 import fi.dy.masa.malilib.hotkeys.IKeybindProvider;
 import fi.dy.masa.malilib.hotkeys.KeyAction;
+import fi.dy.masa.malilib.registry.Registry;
+import fi.dy.masa.malilib.util.data.ModInfo;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
@@ -29,6 +31,11 @@ public class TweakerXiheClient implements ClientModInitializer {
         // 配置交给 malilib 统一读写与显示，界面见 GuiConfigs
         ConfigManager.getInstance().registerConfigHandler(HighlightConfig.MOD_ID, HighlightConfig.getInstance());
         HighlightConfig.loadFromFile();
+
+        // 主动把界面注册进 malilib：只在 initGui 里惰性自动注册的话，
+        // 界面打不开就永远进不了它的模组列表，等于没有入口
+        Registry.CONFIG_SCREEN.registerConfigScreenFactory(
+                new ModInfo(HighlightConfig.MOD_ID, "TweakerXihe", GuiConfigs::new));
 
         BlockHighlighterRender.setup();
         InteractionHandler.setup();
