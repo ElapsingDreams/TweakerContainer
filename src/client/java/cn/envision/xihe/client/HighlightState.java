@@ -358,6 +358,13 @@ public final class HighlightState {
         World world = MinecraftClient.getInstance().world;
         BlockState state = world != null ? world.getBlockState(immutablePos) : null;
 
+        // 投影容器只缓存内容（用于扣减需求），不登记为仓储容器，
+        // 否则手持触发物品时会在投影容器位置多画一个蓝框
+        if (immutablePos.equals(currentProjectionContainer)) {
+            cacheContents(immutablePos, inv, state);
+            return;
+        }
+
         if (world != null && state != null && state.getBlock() instanceof ChestBlock) {
             ChestType chestType = state.get(ChestBlock.CHEST_TYPE);
             if (chestType != ChestType.SINGLE && inv.size() % 2 == 0) {
@@ -381,17 +388,23 @@ public final class HighlightState {
         putStorageContainer(immutablePos, inv, state);
     }
 
-    private void putStorageContainer(BlockPos pos, Inventory inv, BlockState state) {
-        // 注意不能写成 `put(...) != inv || storageContainers.add(pos)`：
-        // 左边为真时 || 会短路，导致登记这一句根本不执行
-        boolean cacheChanged = storageContainerCache.put(pos, inv) != inv;
-        boolean added = storageContainers.add(pos);
-
-        if (cacheChanged || added) {
+    /** 只写内容与方块状态，不登记为仓储容器。 */
+    private void cacheContents(BlockPos pos, Inventory inv, BlockState state) {
+        if (storageContainerCache.put(pos, inv) != inv) {
             markDirty();
         }
         if (state != null) {
             storageContainerStates.put(pos, state);
+        }
+    }
+
+    private void putStorageContainer(BlockPos pos, Inventory inv, BlockState state) {
+        cacheContents(pos, inv, state);
+
+        // 注意不能写成 `put(...) != inv || storageContainers.add(pos)`：
+        // 左边为真时 || 会短路，导致登记这一句根本不执行
+        if (storageContainers.add(pos)) {
+            markDirty();
         }
     }
 
