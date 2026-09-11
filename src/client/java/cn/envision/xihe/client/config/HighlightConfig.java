@@ -55,6 +55,8 @@ public class HighlightConfig implements IConfigHandler {
                 "严格校验 NBT：物品组件不一致时不计入缺失，也不互相顶替数量");
         public static final ConfigBoolean NBT_MISMATCH_COLOR = new ConfigBoolean("nbtMismatchColor", true,
                 "严格校验时，物品相同但 NBT 不同的槽位换一种背景色提示");
+        public static final ConfigBoolean READ_NESTED_CONTAINERS = new ConfigBoolean("readNestedContainers", true,
+                "嵌套读取容器内容：箱子或背包里的潜影盒、收纳袋也算作可用物品（最多两层）");
         public static final ConfigBoolean COUNT_ONLY_FIRST_MATCH = new ConfigBoolean("countOnlyFirstMatch", true,
                 "同一种物品只标注第一个匹配到的格子（背景与数量都不画），其余格子保持原样；关闭则每个格子都标");
         public static final ConfigBoolean HINT_IN_PLAYER_INVENTORY = new ConfigBoolean("hintInPlayerInventory", false,
@@ -74,6 +76,7 @@ public class HighlightConfig implements IConfigHandler {
                 SEE_THROUGH,
                 STRICT_NBT,
                 NBT_MISMATCH_COLOR,
+                READ_NESTED_CONTAINERS,
                 COUNT_ONLY_FIRST_MATCH,
                 HINT_IN_PLAYER_INVENTORY,
                 HINT_TEXT_OFFSET_X,
@@ -140,6 +143,10 @@ public class HighlightConfig implements IConfigHandler {
 
     public static boolean isCountOnlyFirstMatch() {
         return Generic.COUNT_ONLY_FIRST_MATCH.getBooleanValue();
+    }
+
+    public static boolean isReadNestedContainers() {
+        return Generic.READ_NESTED_CONTAINERS.getBooleanValue();
     }
 
     public static boolean isHintInPlayerInventory() {

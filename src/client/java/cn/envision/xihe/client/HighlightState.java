@@ -2,6 +2,7 @@ package cn.envision.xihe.client;
 
 import cn.envision.xihe.client.config.HighlightConfig;
 import cn.envision.xihe.client.features.PlacementContainerAccess;
+import fi.dy.masa.malilib.util.InventoryUtils;
 import net.minecraft.block.BlockState;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.component.ComponentChanges;
@@ -39,6 +40,9 @@ public final class HighlightState {
     public record StackKey(Item item, ComponentChanges components) {
     }
 
+    // 嵌套读取的最大层数：箱子 → 潜影盒 → 收纳袋
+    private static final int MAX_NESTING_DEPTH = 2;
+
     /** 该物品对应的需求键，供界面判断“同一种物品”用。 */
     public static StackKey requirementKey(ItemStack stack) {
         return stack.isEmpty() ? null : keyOf(stack);
@@ -72,10 +76,56 @@ public final class HighlightState {
                 HighlightConfig.isStrictNbt() ? stack.getComponentChanges() : null);
     }
 
-    private static void merge(Map<StackKey, Integer> counts, ItemStack stack) {
-        if (!stack.isEmpty()) {
-            counts.merge(keyOf(stack), stack.getCount(), Integer::sum);
+    private static void merge(Map<StackKey, Integer> counts, ItemStack stack, int depth) {
+        if (stack.isEmpty()) {
+            return;
         }
+
+        counts.merge(keyOf(stack), stack.getCount(), Integer::sum);
+
+        if (depth <= 0 || !HighlightConfig.isReadNestedContainers()) {
+            return;
+        }
+
+        for (ItemStack nested : storedItemsOf(stack)) {
+            merge(counts, nested, depth - 1);
+        }
+    }
+
+    /**
+     * 该物品里装着的物品。
+     * <p>
+     * 判定与读取都走 malilib 的组件接口（{@code CONTAINER} 与 {@code BUNDLE_CONTENTS}），
+     * 所以潜影盒、收纳袋以及任何带容器组件的模组物品都能覆盖，不需要物品类型白名单。
+     */
+    private static List<ItemStack> storedItemsOf(ItemStack stack) {
+        if (InventoryUtils.shulkerBoxHasItems(stack)) {
+            return InventoryUtils.getStoredItems(stack);
+        }
+        if (InventoryUtils.bundleHasItems(stack)) {
+            return InventoryUtils.getBundleItems(stack);
+        }
+        return List.of();
+    }
+
+    /** 该物品或它装着的东西里，是否有需要去取的。 */
+    private static boolean containsNeeded(Map<StackKey, Integer> needed, ItemStack stack, int depth) {
+        if (stack.isEmpty()) {
+            return false;
+        }
+        if (needed.containsKey(keyOf(stack))) {
+            return true;
+        }
+        if (depth <= 0 || !HighlightConfig.isReadNestedContainers()) {
+            return false;
+        }
+
+        for (ItemStack nested : storedItemsOf(stack)) {
+            if (containsNeeded(needed, nested, depth - 1)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     // ---------- 渲染侧只读视图 ----------
@@ -163,7 +213,7 @@ public final class HighlightState {
         PlayerEntity player = MinecraftClient.getInstance().player;
         if (player != null) {
             for (int i = 0; i < player.getInventory().size(); i++) {
-                merge(playerCount, player.getInventory().getStack(i));
+                merge(playerCount, player.getInventory().getStack(i), MAX_NESTING_DEPTH);
             }
         }
 
@@ -172,14 +222,14 @@ public final class HighlightState {
         Inventory projectionInv = storageContainerCache.get(currentProjectionContainer);
         if (projectionInv != null) {
             for (int i = 0; i < projectionInv.size(); i++) {
-                merge(containerCount, projectionInv.getStack(i));
+                merge(containerCount, projectionInv.getStack(i), MAX_NESTING_DEPTH);
             }
         }
 
-        // 3. 需求按总数合并后再扣减，几组相同物品会算在一起
+        // 3. 需求按总数合并后再扣减，几组相同物品会算在一起；需求侧不展开容器内容
         Map<StackKey, Integer> required = new HashMap<>();
         for (ItemStack missing : currentMissingItems) {
-            merge(required, missing);
+            merge(required, missing, 0);
         }
 
         for (Map.Entry<StackKey, Integer> entry : required.entrySet()) {
@@ -214,7 +264,7 @@ public final class HighlightState {
 
             for (int i = 0; i < storageInv.size(); i++) {
                 ItemStack storedStack = storageInv.getStack(i);
-                if (!storedStack.isEmpty() && remainingNeeded.containsKey(keyOf(storedStack))) {
+                if (containsNeeded(remainingNeeded, storedStack, MAX_NESTING_DEPTH)) {
                     matchingStorageContainers.add(storagePos);
                     break;
                 }
@@ -352,7 +402,7 @@ public final class HighlightState {
                 continue;
             }
             for (int i = 0; i < storageInv.size(); i++) {
-                merge(stored, storageInv.getStack(i));
+                merge(stored, storageInv.getStack(i), MAX_NESTING_DEPTH);
             }
         }
 
@@ -384,12 +434,12 @@ public final class HighlightState {
         // 需求与可提供数量都按总数汇总后再逐个比较
         Map<StackKey, Integer> required = new HashMap<>();
         for (ItemStack missingStack : currentMissingItems) {
-            merge(required, missingStack);
+            merge(required, missingStack, 0);
         }
 
         Map<StackKey, Integer> available = new HashMap<>();
         for (int i = 0; i < storageInv.size(); i++) {
-            merge(available, storageInv.getStack(i));
+            merge(available, storageInv.getStack(i), MAX_NESTING_DEPTH);
         }
 
         for (Map.Entry<StackKey, Integer> entry : required.entrySet()) {
