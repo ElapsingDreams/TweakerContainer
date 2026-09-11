@@ -108,11 +108,8 @@ public abstract class HandledScreenMixin<T extends ScreenHandler> {
         if (stack.isEmpty()) return;
 
         // 需求总量：一个物品需要多少就写多少，不按格子数量分摊或封顶
-        HighlightState state = HighlightState.get();
-        int needed = slot.inventory instanceof PlayerInventory
-                ? state.getProjectionMissing(stack)
-                : state.getRemainingNeeded(stack);
-        if (needed <= 0) return;
+        HighlightState.SlotNeed need = getSlotNeed(HighlightState.get(), slot);
+        if (need == null) return;
 
         // 以槽位左上角为锚点，右/下偏移与字号都由配置决定；避开原版画在右下角的堆叠数量
         Matrix3x2fStack matrices = context.getMatrices();
@@ -122,7 +119,7 @@ public abstract class HandledScreenMixin<T extends ScreenHandler> {
         float scale = HighlightConfig.getHintTextScale();
         matrices.scale(scale, scale);
         context.drawText(MinecraftClient.getInstance().textRenderer,
-                Integer.toString(needed), 0, 0, HighlightConfig.getSlotCountTextColor(), true);
+                Integer.toString(need.amount()), 0, 0, HighlightConfig.getSlotCountTextColor(), true);
         matrices.popMatrix();
     }
 
@@ -142,10 +139,11 @@ public abstract class HandledScreenMixin<T extends ScreenHandler> {
         }
 
         boolean playerSlot = slot.inventory instanceof PlayerInventory;
-        int needed = playerSlot ? state.getProjectionMissing(stack) : state.getRemainingNeeded(stack);
 
-        if (needed > 0) {
-            if (!isFirstMatchSlot(stack, playerSlot)) {
+        // 自身或内部容器内容命中需求时标色，数量用该需求的总量
+        HighlightState.SlotNeed need = state.matchSlot(stack, playerSlot);
+        if (need != null) {
+            if (!isFirstMatchSlot(need.key(), playerSlot)) {
                 return 0;
             }
             xiheShowCount = true;
@@ -155,7 +153,7 @@ public abstract class HandledScreenMixin<T extends ScreenHandler> {
         // 严格校验时，物品相同但 NBT 不同的槽位换一种颜色提示，同样只标第一个匹配格子
         if (HighlightConfig.isNbtMismatchColor()
                 && state.hasComponentMismatch(stack, playerSlot)
-                && isFirstMatchSlot(stack, playerSlot)) {
+                && isFirstMatchSlot(HighlightState.requirementKey(stack), playerSlot)) {
             return HighlightConfig.getSlotNbtMismatchColor();
         }
 
@@ -163,16 +161,25 @@ public abstract class HandledScreenMixin<T extends ScreenHandler> {
     }
 
     /**
+     * 该槽位匹配到的需求（含容器内部内容），没有则返回 null。
+     */
+    @Unique
+    private HighlightState.SlotNeed getSlotNeed(HighlightState state, Slot slot) {
+        ItemStack stack = slot.getStack();
+        if (stack.isEmpty() || !isHintSide(state, slot)) {
+            return null;
+        }
+
+        // 背包侧看投影容器还缺多少，容器侧看还要去仓储取多少
+        return state.matchSlot(stack, slot.inventory instanceof PlayerInventory);
+    }
+
+    /**
      * 该槽位是否是同一需求键第一个被绘制的格子；关闭“只标第一个”时恒为 true。
      */
     @Unique
-    private boolean isFirstMatchSlot(ItemStack stack, boolean playerSlot) {
-        if (!HighlightConfig.isCountOnlyFirstMatch()) {
-            return true;
-        }
-
-        ItemType key = HighlightState.requirementKey(stack);
-        if (key == null) {
+    private boolean isFirstMatchSlot(ItemType key, boolean playerSlot) {
+        if (!HighlightConfig.isCountOnlyFirstMatch() || key == null) {
             return true;
         }
 

@@ -136,14 +136,60 @@ public final class HighlightState {
 
     // ---------- 槽位提示查询 ----------
 
-    /** 投影容器自身还缺多少，也就是背包里该放进去多少；0 表示不需要。 */
-    public int getProjectionMissing(ItemStack stack) {
-        return stack.isEmpty() ? 0 : projectionMissing.getOrDefault(keyOf(stack), 0);
+    /**
+     * 槽位匹配到的需求：{@code key} 是需求物品的聚合键，{@code amount} 是它的需求总量。
+     */
+    public record SlotNeed(ItemType key, int amount) {
     }
 
-    /** 仓储视角还需要多少（已扣掉背包与投影容器里已有的）；0 表示不需要。 */
-    public int getRemainingNeeded(ItemStack stack) {
-        return stack.isEmpty() ? 0 : remainingNeeded.getOrDefault(keyOf(stack), 0);
+    /**
+     * 查询该槽位物品满足的需求。
+     * <p>
+     * 先看物品自身，自身不匹配时再看它内部装着的容器内容（潜影盒、收纳袋，最多两层），
+     * 这样装着所需物品的容器格子也能被标出来。
+     *
+     * @param projectionView true 查投影容器缺口，false 查仓储需求
+     * @return 没有匹配时返回 null
+     */
+    public SlotNeed matchSlot(ItemStack stack, boolean projectionView) {
+        if (stack.isEmpty()) {
+            return null;
+        }
+
+        Map<ItemType, Integer> source = projectionView ? projectionMissing : remainingNeeded;
+
+        ItemType self = keyOf(stack);
+        Integer direct = source.get(self);
+        if (direct != null && direct > 0) {
+            return new SlotNeed(self, direct);
+        }
+
+        return nestedNeed(source, stack, MAX_NESTING_DEPTH);
+    }
+
+    /** 在容器物品内部递归查找需求物品，返回第一个命中的需求。 */
+    private static SlotNeed nestedNeed(Map<ItemType, Integer> needed, ItemStack stack, int depth) {
+        if (stack.isEmpty() || depth <= 0 || !HighlightConfig.isReadNestedContainers()) {
+            return null;
+        }
+
+        for (ItemStack nested : storedItemsOf(stack)) {
+            if (nested.isEmpty()) {
+                continue;
+            }
+
+            ItemType key = keyOf(nested);
+            Integer amount = needed.get(key);
+            if (amount != null && amount > 0) {
+                return new SlotNeed(key, amount);
+            }
+
+            SlotNeed deeper = nestedNeed(needed, nested, depth - 1);
+            if (deeper != null) {
+                return deeper;
+            }
+        }
+        return null;
     }
 
     /**
