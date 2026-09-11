@@ -83,7 +83,6 @@ public class TweakerXiheClient implements ClientModInitializer {
                             .executes(context -> {
                                 boolean seeThrough = !HighlightConfig.isSeeThrough();
                                 HighlightConfig.setSeeThrough(seeThrough);
-                                BlockHighlighterRender.reloadLayers();
 
                                 context.getSource().sendFeedback(Text.literal(seeThrough
                                         ? "Highlight Through Walls: ON"
