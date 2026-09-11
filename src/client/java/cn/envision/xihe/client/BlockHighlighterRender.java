@@ -32,8 +32,8 @@ public final class BlockHighlighterRender {
     private static final int COLOR_MATCHING = 0xFFFFFF00;   // 黄色
     private static final int COLOR_MANUAL = 0xFFFF00FF;     // 品红（/highlightblock 手动标记）
 
-    private static final float LINE_WIDTH_NORMAL = 2.0F;
-    private static final float LINE_WIDTH_EMPHASIS = 2.5F;
+    private static final float LINE_WIDTH_NORMAL = 3.0F;
+    private static final float LINE_WIDTH_EMPHASIS = 3.5F;
 
     // 超出该距离（方块）的线框不再绘制
     private static final double MAX_RENDER_DISTANCE_SQ = 64.0D * 64.0D;
@@ -138,7 +138,7 @@ public final class BlockHighlighterRender {
                     // NO_DEPTH_TEST 的线框会穿透方块，默认关闭，用 /highlightblock depth 切换
                     .withDepthTestFunction(HighlightConfig.isSeeThrough()
                             ? DepthTestFunction.NO_DEPTH_TEST
-                            : DepthTestFunction.LEQUAL_DEPTH_TEST)//LEQUAL
+                            : DepthTestFunction.LEQUAL_DEPTH_TEST)
                     .withDepthWrite(false)
                     .withCull(false)
                     .withoutBlend()
