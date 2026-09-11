@@ -24,6 +24,7 @@ public final class HighlightConfig {
     private static final Item DEFAULT_TRIGGER_ITEM = Items.SHULKER_BOX;
 
     private static volatile boolean enabled = false;
+    private static volatile boolean seeThrough = false;
     private static Item triggerItem = DEFAULT_TRIGGER_ITEM;
 
     private HighlightConfig() {
@@ -35,6 +36,15 @@ public final class HighlightConfig {
 
     public static void setEnabled(boolean value) {
         enabled = value;
+    }
+
+    public static boolean isSeeThrough() {
+        return seeThrough;
+    }
+
+    public static void setSeeThrough(boolean value) {
+        seeThrough = value;
+        save();
     }
 
     public static Item getTriggerItem() {
@@ -58,6 +68,7 @@ public final class HighlightConfig {
         try (FileReader reader = new FileReader(CONFIG_FILE)) {
             ConfigData data = GSON.fromJson(reader, ConfigData.class);
             triggerItem = parseTriggerItem(data != null ? data.triggerItem : null);
+            seeThrough = data != null && data.seeThrough;
         } catch (IOException | RuntimeException e) {
             LOGGER.warn("读取高亮配置失败，回退到默认触发物品", e);
             triggerItem = DEFAULT_TRIGGER_ITEM;
@@ -67,6 +78,7 @@ public final class HighlightConfig {
     public static void save() {
         ConfigData data = new ConfigData();
         data.triggerItem = Registries.ITEM.getId(triggerItem).toString();
+        data.seeThrough = seeThrough;
 
         try (FileWriter writer = new FileWriter(CONFIG_FILE)) {
             GSON.toJson(data, writer);
@@ -92,5 +104,7 @@ public final class HighlightConfig {
     private static class ConfigData {
         // 缺省为 null，读取时按默认触发物品处理
         private String triggerItem;
+        // 线框是否穿透方块显示
+        private boolean seeThrough;
     }
 }

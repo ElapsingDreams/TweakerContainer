@@ -51,8 +51,12 @@ dependencies {
     modImplementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_api_version}"
     //modImplementation("com.github.sakura-ryoko:malilib:${project.malilib_version}")
     //modImplementation("com.github.sakura-ryoko:litematica:${project.litematica_version}")
+    // litematica / malilib / techutils come from the local jars under libs/.
+    // To upgrade, replace the jar file and bump the matching *_lib_version in gradle.properties.
+    // To switch to remote coordinates, uncomment the *_version entries in gradle.properties and use:
+    //   modImplementation("com.github.sakura-ryoko:malilib:${project.malilib_version}")
+    //   modImplementation("com.github.sakura-ryoko:litematica:${project.litematica_version}")
     modImplementation(files("libs/malilib-fabric-${project.malilib_lib_version}.jar"))
-    modImplementation(files("libs/litematica-fabric-${project.litematica_lib_version}.jar"))
     modImplementation(files("libs/litematica-fabric-${project.litematica_lib_version}.jar"))
     modImplementation(files("libs/techutils-${project.techutils_lib_version}.jar"))
 

@@ -78,6 +78,17 @@ public class TweakerXiheClient implements ClientModInitializer {
                                 setEnabled(false);
                                 context.getSource().sendFeedback(Text.literal("Stopping Auto Highlight Block."));
                                 return 1;
+                            }))
+                    .then(literal("depth")
+                            .executes(context -> {
+                                boolean seeThrough = !HighlightConfig.isSeeThrough();
+                                HighlightConfig.setSeeThrough(seeThrough);
+                                BlockHighlighterRender.reloadLayers();
+
+                                context.getSource().sendFeedback(Text.literal(seeThrough
+                                        ? "Highlight Through Walls: ON"
+                                        : "Highlight Through Walls: OFF"));
+                                return 1;
                             })));
 
             dispatcher.register(literal("highlightblockbyitem")

@@ -2,6 +2,7 @@ package cn.envision.xihe.client;
 
 import cn.envision.xihe.client.config.HighlightConfig;
 import com.mojang.blaze3d.pipeline.RenderPipeline;
+import com.mojang.blaze3d.platform.DepthTestFunction;
 import com.mojang.blaze3d.vertex.VertexFormat;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents;
 import net.fabricmc.fabric.api.client.rendering.v1.WorldRenderContext;
@@ -37,7 +38,7 @@ public final class BlockHighlighterRender {
     // 超出该距离（方块）的线框不再绘制
     private static final double MAX_RENDER_DISTANCE_SQ = 64.0D * 64.0D;
 
-    private static RenderPipeline blockHighlightPipeline;
+    private static volatile RenderPipeline blockHighlightPipeline;
     // 每种线宽一个 RenderLayer，线宽参数才能真正生效
     private static final Map<Float, RenderLayer> HIGHLIGHT_LAYERS = new ConcurrentHashMap<>();
 
@@ -52,6 +53,14 @@ public final class BlockHighlighterRender {
     private static void onDisconnect(ClientPlayNetworkHandler clientPlayNetworkHandler, MinecraftClient minecraftClient) {
         HighlightConfig.setEnabled(false);
         HighlightState.get().clearAll();
+    }
+
+    /**
+     * 深度测试等渲染配置变更后，丢弃已缓存的 pipeline 与 RenderLayer。
+     */
+    public static void reloadLayers() {
+        HIGHLIGHT_LAYERS.clear();
+        blockHighlightPipeline = null;
     }
 
     // 检查是否手持触发物品
@@ -126,7 +135,10 @@ public final class BlockHighlighterRender {
                     .withFragmentShader(baseLinePipeline.getFragmentShader())
                     .withVertexFormat(VertexFormats.POSITION_COLOR_NORMAL, VertexFormat.DrawMode.LINES)
                     .withUniform("DynamicTransforms", UniformType.UNIFORM_BUFFER)
-                    // .withDepthTestFunction(DepthTestFunction.NO_DEPTH_TEST) 会瞎的
+                    // NO_DEPTH_TEST 的线框会穿透方块，默认关闭，用 /highlightblock depth 切换
+                    .withDepthTestFunction(HighlightConfig.isSeeThrough()
+                            ? DepthTestFunction.NO_DEPTH_TEST
+                            : DepthTestFunction.LEQUAL)
                     .withDepthWrite(false)
                     .withCull(false)
                     .withoutBlend()
