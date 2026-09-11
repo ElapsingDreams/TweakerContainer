@@ -55,6 +55,8 @@ public class HighlightConfig implements IConfigHandler {
                 "严格校验 NBT：物品组件不一致时不计入缺失，也不互相顶替数量");
         public static final ConfigBoolean NBT_MISMATCH_COLOR = new ConfigBoolean("nbtMismatchColor", true,
                 "严格校验时，物品相同但 NBT 不同的槽位换一种背景色提示");
+        public static final ConfigBoolean COUNT_ONLY_FIRST_MATCH = new ConfigBoolean("countOnlyFirstMatch", true,
+                "同一种物品只在第一个匹配到的格子显示数量，其余格子只标背景；关闭则每个格子都显示");
         public static final ConfigBoolean HINT_IN_PLAYER_INVENTORY = new ConfigBoolean("hintInPlayerInventory", false,
                 "在玩家背包界面也显示投影容器的缺货提示");
         public static final ConfigInteger HINT_TEXT_OFFSET_X = new ConfigInteger("hintTextOffsetX", 2, 0, 16,
@@ -72,6 +74,7 @@ public class HighlightConfig implements IConfigHandler {
                 SEE_THROUGH,
                 STRICT_NBT,
                 NBT_MISMATCH_COLOR,
+                COUNT_ONLY_FIRST_MATCH,
                 HINT_IN_PLAYER_INVENTORY,
                 HINT_TEXT_OFFSET_X,
                 HINT_TEXT_OFFSET_Y,
@@ -133,6 +136,10 @@ public class HighlightConfig implements IConfigHandler {
 
     public static boolean isNbtMismatchColor() {
         return Generic.NBT_MISMATCH_COLOR.getBooleanValue();
+    }
+
+    public static boolean isCountOnlyFirstMatch() {
+        return Generic.COUNT_ONLY_FIRST_MATCH.getBooleanValue();
     }
 
     public static boolean isHintInPlayerInventory() {

@@ -18,16 +18,24 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
+import java.util.HashSet;
+import java.util.Set;
+
 import static cn.envision.xihe.client.config.HighlightConfig.isEnabled;
 
 /**
  * 容器界面的缺货提示：在槽位上标出还缺的物品，并在槽位左上角写上数量。
  * <p>
  * 打开投影容器时，背包侧显示该放进去多少；打开其它容器时，容器侧显示该取出多少，
- * 背包侧是否也提示由配置决定。
+ * 背包侧是否也提示由配置决定。数量一律用需求总量表示。
  */
 @Mixin(HandledScreen.class)
 public abstract class HandledScreenMixin<T extends ScreenHandler> {
+    // 每帧记录已显示过数量的需求键，用于“同种物品只在第一个匹配格子显示”
+    @Unique
+    private Set<HighlightState.StackKey> xiheShownPutKeys;
+    @Unique
+    private Set<HighlightState.StackKey> xiheShownTakeKeys;
 
     @Inject(method = "close",
         at = @At("RETURN"),
@@ -38,6 +46,21 @@ public abstract class HandledScreenMixin<T extends ScreenHandler> {
         InventoryOverlay.clearCurrentContainer();
         if (!isEnabled()) return;
         HighlightState.get().updateMatching();
+    }
+
+    @Inject(
+            method = "drawSlots",
+            at = @At("HEAD"),
+            cancellable = false
+    )
+    private void onDrawSlots(DrawContext context, CallbackInfo ci) {
+        // 每帧重置，保证“第一个匹配到的格子”按本次绘制顺序判定
+        if (xiheShownPutKeys != null) {
+            xiheShownPutKeys.clear();
+        }
+        if (xiheShownTakeKeys != null) {
+            xiheShownTakeKeys.clear();
+        }
     }
 
 
@@ -80,11 +103,16 @@ public abstract class HandledScreenMixin<T extends ScreenHandler> {
         ItemStack stack = slot.getStack();
         if (stack.isEmpty()) return;
 
+        // 需求总量：一个物品需要多少就写多少，不按格子数量分摊或封顶
         int needed = getNeededAmount(HighlightState.get(), slot);
         if (needed <= 0) return;
 
+        // 同种物品是否只在第一个匹配到的格子显示
+        if (HighlightConfig.isCountOnlyFirstMatch() && !markCountShown(slot)) {
+            return;
+        }
+
         // 以槽位左上角为锚点，右/下偏移与字号都由配置决定；避开原版画在右下角的堆叠数量
-        int count = Math.min(stack.getCount(), needed);
         Matrix3x2fStack matrices = context.getMatrices();
         matrices.pushMatrix();
         matrices.translate(slot.x + HighlightConfig.getHintTextOffsetX(),
@@ -92,8 +120,42 @@ public abstract class HandledScreenMixin<T extends ScreenHandler> {
         float scale = HighlightConfig.getHintTextScale();
         matrices.scale(scale, scale);
         context.drawText(MinecraftClient.getInstance().textRenderer,
-                Integer.toString(count), 0, 0, HighlightConfig.getSlotCountTextColor(), true);
+                Integer.toString(needed), 0, 0, HighlightConfig.getSlotCountTextColor(), true);
         matrices.popMatrix();
+    }
+
+    /**
+     * 记录该需求键已经显示过数量。
+     *
+     * @return 首次出现返回 true，之后返回 false
+     */
+    @Unique
+    private boolean markCountShown(Slot slot) {
+        HighlightState.StackKey key = HighlightState.requirementKey(slot.getStack());
+        if (key == null) {
+            return true;
+        }
+
+        Set<HighlightState.StackKey> shown = slot.inventory instanceof PlayerInventory
+                ? shownPutKeys()
+                : shownTakeKeys();
+        return shown.add(key);
+    }
+
+    @Unique
+    private Set<HighlightState.StackKey> shownPutKeys() {
+        if (xiheShownPutKeys == null) {
+            xiheShownPutKeys = new HashSet<>();
+        }
+        return xiheShownPutKeys;
+    }
+
+    @Unique
+    private Set<HighlightState.StackKey> shownTakeKeys() {
+        if (xiheShownTakeKeys == null) {
+            xiheShownTakeKeys = new HashSet<>();
+        }
+        return xiheShownTakeKeys;
     }
 
     /**

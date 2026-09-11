@@ -36,7 +36,12 @@ public final class HighlightState {
      * <p>
      * {@link ComponentChanges} 自带 equals/hashCode，可以直接作为 map 键。
      */
-    private record StackKey(Item item, ComponentChanges components) {
+    public record StackKey(Item item, ComponentChanges components) {
+    }
+
+    /** 该物品对应的需求键，供界面判断“同一种物品”用。 */
+    public static StackKey requirementKey(ItemStack stack) {
+        return stack.isEmpty() ? null : keyOf(stack);
     }
 
     private final Map<StackKey, Integer> remainingNeeded = new ConcurrentHashMap<>();
