@@ -2,13 +2,13 @@ package cn.envision.xihe.client;
 
 import net.minecraft.client.render.RenderPhase;
 
+import java.util.HashMap;
 import java.util.Map;
 import java.util.OptionalDouble;
-import java.util.WeakHashMap;
 
 public class RenderPhaseCache {
-    // 弱引用缓存，键为线宽值，值为对应的LineWidth实例
-    private static final Map<Double, RenderPhase.LineWidth> LINE_WIDTH_CACHE = new WeakHashMap<>();
+    // 线宽值到 LineWidth 实例的缓存，避免重复创建
+    private static final Map<Double, RenderPhase.LineWidth> LINE_WIDTH_CACHE = new HashMap<>();
 
     // 获取线宽实例（复用已有实例）
     public static RenderPhase.LineWidth getLineWidthPhase(double lineWidth) {

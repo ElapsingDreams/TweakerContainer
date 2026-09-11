@@ -18,8 +18,6 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
-import java.util.List;
-
 import static cn.envision.xihe.client.BlockHighlighterRender.getCurrentProjectionContainer;
 import static cn.envision.xihe.client.BlockHighlighterRender.updateMatchingStorageContainers;
 import static cn.envision.xihe.client.config.HighlightConfig.getSW;
@@ -64,30 +62,21 @@ public abstract class HandledScreenMixin<T extends ScreenHandler> {
         }
         BlockHighlighterRender.addSTORAGE_CONTAINER_CACHE(containerPos, slot.inventory);
 
-        BlockHighlighterRender.updateMatchingStorageContainers();
-        List<ItemStack> missingItems = BlockHighlighterRender.getCurrentMissingItems();
-        if (missingItems.isEmpty()) {
-            return;
-        }
+        // 只有标脏时才重算，不再逐槽全量重建
+        BlockHighlighterRender.ensureMatchingUpToDate();
+
         ItemStack currentStack = slot.getStack();
         if (currentStack.isEmpty()) {
             return;
         }
         BlockPos currentProjectionContainer = getCurrentProjectionContainer();
         BlockPos currentContainerPos = getCurrentContainerPos();
-        if(currentProjectionContainer != null && currentContainerPos != null) {
+        if (currentProjectionContainer != null && currentContainerPos != null) {
             if (currentProjectionContainer.equals(currentContainerPos)) return;
 
-
-            boolean found = false;
-            for (ItemStack needed : missingItems) {
-                if (ItemStack.areItemsEqual(currentStack, needed)) {
-                    if (BlockHighlighterRender.getRemainingNeeded().getOrDefault(currentStack.getItem(), 0) > 0) {
-                        drawFoundItemHighlight(context, slot);
-                    }
-                    found = true;
-                    break;
-                }
+            // 剩余需求表本身就只包含仍然缺少的物品
+            if (BlockHighlighterRender.getRemainingNeeded().getOrDefault(currentStack.getItem(), 0) > 0) {
+                drawFoundItemHighlight(context, slot);
             }
         }
 

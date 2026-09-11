@@ -17,7 +17,7 @@ public class HighlightConfig {
     private static final File CONFIG_FILE = new File("config/xihe_highlight.json");
 
     private static Item triggerItem = Items.SHULKER_BOX;
-    private static boolean SW = false;
+    private static volatile boolean SW = false;
     public static void load() {
         if (!CONFIG_FILE.exists()) {
             save();
