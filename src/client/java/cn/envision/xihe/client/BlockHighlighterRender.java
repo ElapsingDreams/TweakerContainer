@@ -58,6 +58,7 @@ public class BlockHighlighterRender {
     private static final int COLOR_PROJECTION = 0xFF00FF00; // 绿色
     private static final int COLOR_STORAGE = 0xFF0000FF;    // 蓝色
     private static final int COLOR_MATCHING = 0xFFFFFF00;   // 黄色
+    private static final int COLOR_MANUAL = 0xFFFF00FF;     // 品红（/highlightblock 手动标记）
     private static BlockPos tempProcessingPos = null;
     public static void setup() {
         // 注册世界渲染事件
@@ -75,7 +76,10 @@ public class BlockHighlighterRender {
     }
 
     public static void addSTORAGE_CONTAINER_CACHE(BlockPos pos, Inventory inv){
-            STORAGE_CONTAINER_CACHE.put(pos, inv);
+        if (pos == null || inv == null) {
+            return;
+        }
+        STORAGE_CONTAINER_CACHE.put(pos.toImmutable(), inv);
     }
     // 新增：设置临时处理坐标
     public static void setTempProcessingPos(BlockPos pos) {
@@ -112,18 +116,22 @@ public class BlockHighlighterRender {
             }
         }
 
-        // 3. 计算扣除背包和投影容器后，每种物品还缺多少
-        //Map<Item, Integer> remainingNeeded = new HashMap<>();
+        // 3. 先把同一物品在多个槽位的需求合并，再整体扣除背包和投影容器里的数量
+        Map<Item, Integer> neededTotal = new HashMap<>();
         for (ItemStack missing : currentMissingItems) {
-            int needed = missing.getCount();
-            int haveInPlayer = playerInventoryCount.getOrDefault(missing.getItem(), 0);
-            int haveInProjection = projectionContainerCount.getOrDefault(missing.getItem(), 0);
+            if (missing.isEmpty()) {
+                continue;
+            }
+            neededTotal.merge(missing.getItem(), missing.getCount(), Integer::sum);
+        }
 
-            // 核心修改：从总需求中减去玩家背包和投影容器里已有的数量
-            int remaining = needed - haveInPlayer - haveInProjection;
+        for (Map.Entry<Item, Integer> entry : neededTotal.entrySet()) {
+            int remaining = entry.getValue()
+                    - playerInventoryCount.getOrDefault(entry.getKey(), 0)
+                    - projectionContainerCount.getOrDefault(entry.getKey(), 0);
 
             if (remaining > 0) {
-                remainingNeeded.put(missing.getItem(), remaining);
+                remainingNeeded.put(entry.getKey(), remaining);
             }
         }
 
@@ -167,6 +175,17 @@ public class BlockHighlighterRender {
     public static Set<BlockPos> getTempHighlightedBlocks() {
         return TEMP_HIGHLIGHTED_BLOCKS;
     }
+
+    // 手动标记的高亮方块（/highlightblock）
+    public static void addHighlightedBlock(BlockPos pos) {
+        if (pos != null) {
+            HIGHLIGHTED_BLOCKS.add(pos.toImmutable());
+        }
+    }
+
+    public static Set<BlockPos> getHighlightedBlocks() {
+        return Collections.unmodifiableSet(HIGHLIGHTED_BLOCKS);
+    }
     // 检查是否为仓储容器
     public static boolean isStorageContainer(BlockPos pos) {
         return STORAGE_CONTAINERS.contains(pos.toImmutable());
@@ -175,12 +194,12 @@ public class BlockHighlighterRender {
     // 设置投影容器
     public static boolean setCurrentProjectionContainer(BlockPos newPos) {
         if (newPos == null) {
-            //LOGGER.warn("{} 尝试设置空的投影容器，操作忽略", MOD_TAG);
+            return false;
         }
 
-        BlockPos immutableNewPos = newPos;
+        BlockPos immutableNewPos = newPos.toImmutable();
         World world = MinecraftClient.getInstance().world;
-        if (world == null) return true;
+        if (world == null) return false;
         // 原则上弃用，非servux等协议获取，此处纯作为虚拟方块，缺的方块默认成全部了，能用就行)
         BlockState state = world.getBlockState(immutableNewPos);
         Optional<SimpleInventory> schematicInv = PlacementContainerAccess.getSchematicInventory(immutableNewPos, state);
@@ -190,11 +209,8 @@ public class BlockHighlighterRender {
             return false;
         }
 
-        if (currentProjectionContainer != null) {
-            HIGHLIGHTED_BLOCKS.remove(currentProjectionContainer);
-        }
+        // 投影容器只由 currentProjectionContainer 跟踪，不再混入手动标记集合
         currentProjectionContainer = immutableNewPos;
-        HIGHLIGHTED_BLOCKS.add(immutableNewPos.toImmutable());
         //LOGGER.info("{} 已设置投影容器：{}", MOD_TAG, immutableNewPos.toShortString());
         //logInventoryContent("投影容器", immutableNewPos, schematicInv.get());
 
@@ -271,9 +287,13 @@ public class BlockHighlighterRender {
         STORAGE_CONTAINERS.clear();
         STORAGE_CONTAINER_CACHE.clear();
         HIGHLIGHTED_BLOCKS.clear();
-        currentProjectionContainer = null;
-        currentMissingItems.clear();
+        TEMP_HIGHLIGHTED_BLOCKS.clear();
         MATCHING_STORAGE_CONTAINERS.clear();
+        remainingNeeded.clear();
+        currentMissingItems.clear();
+        currentProjectionContainer = null;
+        tempProcessingPos = null;
+        RenderPhaseCache.clearCache();
         //LOGGER.info("{} 清除所有仓储容器及缓存", MOD_TAG);
     }
     private static void clearAll(ClientPlayNetworkHandler clientPlayNetworkHandler, MinecraftClient minecraftClient) {
@@ -294,6 +314,10 @@ public class BlockHighlighterRender {
         MatrixStack matrices = context.matrixStack();
         BufferBuilderStorage bufferBuilders = MinecraftClient.getInstance().getBufferBuilders();
         VertexConsumerProvider.Immediate immediate = bufferBuilders.getEntityVertexConsumers();
+
+        for (BlockPos highlightPos : HIGHLIGHTED_BLOCKS) {
+            renderBlockWireframe(matrices, immediate, cameraPos, highlightPos, COLOR_MANUAL, 2.0F);
+        }
 
         if (isHoldingTrigger) {
             for (BlockPos storagePos : STORAGE_CONTAINERS) {

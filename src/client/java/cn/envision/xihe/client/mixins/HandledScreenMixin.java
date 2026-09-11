@@ -55,10 +55,16 @@ public abstract class HandledScreenMixin<T extends ScreenHandler> {
             return;
         }
         if (!getSW()) return;
-        BlockHighlighterRender.updateMatchingStorageContainers();
-        BlockPos clickedPos = BlockHighlighterRender.getAndClearTempProcessingPos();
 
-        BlockHighlighterRender.addSTORAGE_CONTAINER_CACHE(clickedPos, slot.inventory);
+        // 缓存键用真实的容器坐标，临时坐标只作为兜底
+        BlockPos containerPos = getCurrentContainerPos();
+        BlockPos clickedPos = BlockHighlighterRender.getAndClearTempProcessingPos();
+        if (containerPos == null || BlockPos.ORIGIN.equals(containerPos)) {
+            containerPos = clickedPos;
+        }
+        BlockHighlighterRender.addSTORAGE_CONTAINER_CACHE(containerPos, slot.inventory);
+
+        BlockHighlighterRender.updateMatchingStorageContainers();
         List<ItemStack> missingItems = BlockHighlighterRender.getCurrentMissingItems();
         if (missingItems.isEmpty()) {
             return;
@@ -70,10 +76,7 @@ public abstract class HandledScreenMixin<T extends ScreenHandler> {
         BlockPos currentProjectionContainer = getCurrentProjectionContainer();
         BlockPos currentContainerPos = getCurrentContainerPos();
         if(currentProjectionContainer != null && currentContainerPos != null) {
-            if (currentProjectionContainer.getX() == currentContainerPos.getX() &&
-                    currentProjectionContainer.getY() == currentContainerPos.getY() &&
-                    currentProjectionContainer.getZ() == currentContainerPos.getZ()
-            ) return;
+            if (currentProjectionContainer.equals(currentContainerPos)) return;
 
 
             boolean found = false;

@@ -47,17 +47,11 @@ public abstract class InteractionHandler {
                         pos.getX(), pos.getY(), pos.getZ()), true);
                 return ActionResult.SUCCESS;
             }
-            if(BlockHighlighterRender.getCurrentProjectionContainer() != null){
-                System.out.println(pos);
-                System.out.println(BlockHighlighterRender.getCurrentProjectionContainer());
-                if (pos == BlockHighlighterRender.getCurrentProjectionContainer()) {
-
-
-                    removeProjectContainer();
-                    player.sendMessage(Text.translatable("xihe.message.removed_schem",
-                         pos.getX(), pos.getY(), pos.getZ()), true);
-                    return ActionResult.SUCCESS;
-                }
+            if (pos.equals(BlockHighlighterRender.getCurrentProjectionContainer())) {
+                removeProjectContainer();
+                player.sendMessage(Text.translatable("xihe.message.removed_schem",
+                        pos.getX(), pos.getY(), pos.getZ()), true);
+                return ActionResult.SUCCESS;
             }
         } /*else if (player.isSneaking() && hitResult.getType() == BlockHitResult.Type.MISS) {
             // 潜行右键空气清除所有标记

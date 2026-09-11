@@ -19,8 +19,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
-import static cn.envision.xihe.client.BlockHighlighterRender.clearTempHighlightedBlocks;
-import static cn.envision.xihe.client.TweakerXiheClient.HIGHLIGHTED_BLOCKS;
 import static cn.envision.xihe.client.config.HighlightConfig.getSW;
 
 public class InventoryOverlay {

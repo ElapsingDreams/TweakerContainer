@@ -16,10 +16,6 @@ import com.mojang.brigadier.arguments.StringArgumentType;
 import cn.envision.xihe.client.config.HighlightConfig;
 import cn.envision.xihe.client.handler.InteractionHandler;
 
-import java.util.HashSet;
-import java.util.Set;
-
-import static cn.envision.xihe.client.BlockHighlighterRender.clearTempHighlightedBlocks;
 import static cn.envision.xihe.client.config.HighlightConfig.getSW;
 import static cn.envision.xihe.client.config.HighlightConfig.setSW;
 import static net.fabricmc.fabric.api.client.command.v2.ClientCommandManager.argument;
@@ -27,7 +23,6 @@ import static net.fabricmc.fabric.api.client.command.v2.ClientCommandManager.lit
 
 @Environment(EnvType.CLIENT)
 public class TweakerXiheClient implements ClientModInitializer {
-    public static final Set<BlockPos> HIGHLIGHTED_BLOCKS = new HashSet<>();
 
     @Override
     public void onInitializeClient() {
@@ -52,7 +47,7 @@ public class TweakerXiheClient implements ClientModInitializer {
                                                     return 0;
                                                 }
 
-                                                HIGHLIGHTED_BLOCKS.add(pos.toImmutable());
+                                                BlockHighlighterRender.addHighlightedBlock(pos);
                                                 context.getSource().sendFeedback(Text.literal("Set " + pos.toShortString() + "  Highlight"));
                                                 return 1;
                                             }))))
@@ -60,8 +55,6 @@ public class TweakerXiheClient implements ClientModInitializer {
                     .then(literal("clear")
                             .executes(context -> {
                                 // 清除所有相关高亮数据
-                                HIGHLIGHTED_BLOCKS.clear();
-                                clearTempHighlightedBlocks();
                                 BlockHighlighterRender.clearAll();
 
                                 context.getSource().sendFeedback(Text.literal("Clear All Highlight Block!"));
