@@ -3,7 +3,6 @@ package cn.envision.xihe.client;
 import cn.envision.xihe.client.config.HighlightConfig;
 import cn.envision.xihe.client.gui.GuiConfigs;
 import cn.envision.xihe.client.handler.InteractionHandler;
-import com.mojang.logging.LogUtils;
 import fi.dy.masa.malilib.config.ConfigManager;
 import fi.dy.masa.malilib.event.InputEventHandler;
 import fi.dy.masa.malilib.gui.GuiBase;
@@ -16,16 +15,14 @@ import fi.dy.masa.malilib.util.data.ModInfo;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
-import org.slf4j.Logger;
 
 import java.util.List;
 
 /**
- * 入口：配置、开关与操作全部走 malilib 的配置界面与热键，不再注册命令。
+ * 入口：配置与开关全部走 malilib 的配置界面与热键。
  */
 @Environment(EnvType.CLIENT)
 public class TweakerXiheClient implements ClientModInitializer {
-    private static final Logger LOGGER = LogUtils.getLogger();
 
     // 与 malilib 自身的 CallbackOpenConfigGui 一致：不判断 KeyAction，触发即开
     private static final IHotkeyCallback OPEN_CONFIG_GUI_CALLBACK = (action, keybind) -> {
@@ -73,8 +70,5 @@ public class TweakerXiheClient implements ClientModInitializer {
         });
 
         keybindManager.updateUsedKeys();
-
-        LOGGER.info("热键注册完成: openConfigGui='{}'",
-                HighlightConfig.Generic.OPEN_CONFIG_GUI.getKeybind().getStringValue());
     }
 }

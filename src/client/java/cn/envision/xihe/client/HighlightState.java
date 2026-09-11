@@ -27,7 +27,7 @@ import java.util.concurrent.CopyOnWriteArrayList;
 /**
  * 高亮功能的状态与仓储匹配逻辑，线框绘制见 {@link BlockHighlighterRender}。
  * <p>
- * 状态会被客户端线程（右击/命令）与渲染线程同时访问，因此统一使用并发容器。
+ * 状态会被客户端线程（右击容器、界面绘制）与渲染线程同时访问，因此统一使用并发容器。
  */
 public final class HighlightState {
     private static final HighlightState INSTANCE = new HighlightState();
@@ -382,7 +382,12 @@ public final class HighlightState {
     }
 
     private void putStorageContainer(BlockPos pos, Inventory inv, BlockState state) {
-        if (storageContainerCache.put(pos, inv) != inv || storageContainers.add(pos)) {
+        // 注意不能写成 `put(...) != inv || storageContainers.add(pos)`：
+        // 左边为真时 || 会短路，导致登记这一句根本不执行
+        boolean cacheChanged = storageContainerCache.put(pos, inv) != inv;
+        boolean added = storageContainers.add(pos);
+
+        if (cacheChanged || added) {
             markDirty();
         }
         if (state != null) {

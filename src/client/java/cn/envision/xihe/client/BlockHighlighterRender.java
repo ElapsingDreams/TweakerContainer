@@ -106,7 +106,8 @@ public final class BlockHighlighterRender {
         }
 
         BlockPos partner = state.getChestPartner(pos);
-        if (partner == null) {
+        // 另一半可能已被撬掉或还没登记，这时退回按单格画
+        if (partner == null || !state.getStorageContainers().contains(partner)) {
             renderOutline(cameraPos, pos, color, throughWalls);
         } else if (partner.asLong() > pos.asLong()) {
             renderChestOutline(cameraPos, pos, partner, color, throughWalls);
