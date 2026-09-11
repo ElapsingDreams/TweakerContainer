@@ -50,6 +50,11 @@ public abstract class HandledScreenMixin<T extends ScreenHandler> {
     private Map<ItemType, Integer> xihePutLabelRemaining;
     @Unique
     private Map<ItemType, Integer> xiheTakeLabelRemaining;
+    // 当前正在看的容器坐标与“内容已变化、需重新拆分”的标记
+    @Unique
+    private BlockPos xiheCapturePos;
+    @Unique
+    private boolean xiheRecapturePending;
     @Unique
     private Set<ItemType> xiheShownTakeKeys;
     // 当前槽位是否要写数量，由 HEAD 阶段的高亮判定顺带给出
@@ -61,6 +66,11 @@ public abstract class HandledScreenMixin<T extends ScreenHandler> {
         cancellable = false
     )
     private void onClose(CallbackInfo ci){
+        // 关屏前抓最后一次，保证缓存停留在最终内容
+        if (isEnabled()) {
+            captureContainer();
+        }
+
         // 关闭界面时清掉当前容器记录，否则再打开背包会被当成还停留在投影容器里
         InventoryOverlay.clearCurrentContainer();
         if (!isEnabled()) return;
@@ -87,20 +97,17 @@ public abstract class HandledScreenMixin<T extends ScreenHandler> {
             return; // init 在窗口尺寸变化时会再次调用
         }
         xiheCapturedSyncId = handler.syncId;
+        xiheCapturePos = clickedPos;
 
-        // 同一屏的非玩家槽位共用一个 Inventory，取第一个就够
-        for (Slot slot : handler.slots) {
-            if (!(slot.inventory instanceof PlayerInventory)) {
-                HighlightState.get().cacheStorageInventory(clickedPos, slot.inventory);
-                break;
-            }
-        }
+        // 首次抓取：此刻槽位内容可能还没同步过来，收到槽位更新后会再抓一次
+        captureContainer();
 
         // 槽位一变就标脏：重算仍由 tick / 渲染的节流兜底，实际每帧最多算一次，
         // 这样搬东西时槽位数字与匹配结果基本立刻跟上
         handler.addListener(new ScreenHandlerListener() {
             @Override
             public void onSlotUpdate(ScreenHandler screenHandler, int slotId, ItemStack stack) {
+                xiheRecapturePending = true;
                 HighlightState.get().markDirty();
             }
 
@@ -112,6 +119,29 @@ public abstract class HandledScreenMixin<T extends ScreenHandler> {
     }
 
     /**
+     * 用当前界面里的容器内容刷新缓存。
+     * <p>
+     * 大箱子的整箱数据是按半拷贝的，所以必须在内容同步到达之后（以及每次内容变化之后）重新拆一次，
+     * 否则拷到的会是空箱子——这也是"有料的大箱子不高亮"的原因。
+     */
+    @Unique
+    @SuppressWarnings("unchecked")
+    private void captureContainer() {
+        if (xiheCapturePos == null) {
+            return;
+        }
+
+        // 同一屏的非玩家槽位共用一个 Inventory，取第一个就够
+        ScreenHandler handler = ((ScreenHandlerProvider<ScreenHandler>) (Object) this).getScreenHandler();
+        for (Slot slot : handler.slots) {
+            if (!(slot.inventory instanceof PlayerInventory)) {
+                HighlightState.get().cacheStorageInventory(xiheCapturePos, slot.inventory);
+                return;
+            }
+        }
+    }
+
+    /**
      * 每 tick 一次的重算（内部按时间节流），不再由画槽位驱动。
      */
     @Inject(method = "handledScreenTick",
@@ -120,6 +150,13 @@ public abstract class HandledScreenMixin<T extends ScreenHandler> {
     )
     private void onHandledScreenTick(CallbackInfo ci) {
         if (!isEnabled()) return;
+
+        // 槽位内容有变化：重新拆一次大箱子的两半数据，再重算
+        if (xiheRecapturePending) {
+            xiheRecapturePending = false;
+            captureContainer();
+        }
+
         HighlightState.get().ensureUpToDate();
     }
 
