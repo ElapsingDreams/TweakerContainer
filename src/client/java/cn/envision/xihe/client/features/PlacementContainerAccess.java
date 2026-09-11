@@ -14,6 +14,7 @@ import net.minecraft.inventory.Inventory;
 import net.minecraft.inventory.SimpleInventory;
 import net.minecraft.nbt.NbtCompound;
 import net.minecraft.util.math.BlockPos;
+import net.minecraft.world.World;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.Map;
@@ -41,9 +42,11 @@ public final class PlacementContainerAccess {
             return getSchematicInventoryInternal(worldPos, worldState);
 
         // Double chest handling
+        World world = MinecraftClient.getInstance().world;
+        if (world == null)
+            return Optional.empty();
         BlockPos adjacentChest = worldPos.add(ChestBlock.getFacing(worldState).getVector());
-        assert MinecraftClient.getInstance().world != null;
-        BlockState adjacentState = MinecraftClient.getInstance().world.getBlockState(adjacentChest);
+        BlockState adjacentState = world.getBlockState(adjacentChest);
 
         Optional<SimpleInventory> opt1 = getSchematicInventoryInternal(worldPos, worldState);
         Optional<SimpleInventory> opt2 = getSchematicInventoryInternal(adjacentChest, adjacentState);
@@ -112,7 +115,10 @@ public final class PlacementContainerAccess {
         if (nbt == null)
             return null;
 
-        var lookup = MinecraftClient.getInstance().world.getRegistryManager();
+        World world = MinecraftClient.getInstance().world;
+        if (world == null)
+            return null;
+        var lookup = world.getRegistryManager();
         var blockEntity = BlockEntity.createFromNbt(
                 placementPos.pos(),
                 placementPos.blockState(),

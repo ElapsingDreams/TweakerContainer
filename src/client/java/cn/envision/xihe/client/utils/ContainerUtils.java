@@ -51,7 +51,8 @@ public class ContainerUtils {
     }
 
     public static boolean isChestAccessible(WorldAccess world, BlockPos pos, BlockState state) {
-        assert state.getBlock() instanceof ChestBlock;
+        if (!(state.getBlock() instanceof ChestBlock))
+            return false;
         if (ChestBlock.isChestBlocked(world, pos))
             return false;
 
@@ -65,9 +66,11 @@ public class ContainerUtils {
     }
 
     public static boolean isShulkerBoxAccessible(WorldAccess world, BlockPos pos, BlockState state) {
-        assert state.getBlock() instanceof ShulkerBoxBlock;
-        ShulkerBoxBlockEntity box = (ShulkerBoxBlockEntity) world.getBlockEntity(pos);
-        if (box == null || box.getAnimationStage() != ShulkerBoxBlockEntity.AnimationStage.CLOSED)
+        if (!(state.getBlock() instanceof ShulkerBoxBlock))
+            return false;
+        if (!(world.getBlockEntity(pos) instanceof ShulkerBoxBlockEntity box))
+            return true;
+        if (box.getAnimationStage() != ShulkerBoxBlockEntity.AnimationStage.CLOSED)
             return true;
 
         return world.isSpaceEmpty(ShulkerEntity
@@ -76,7 +79,10 @@ public class ContainerUtils {
     }
 
     public static List<Text> getFormattedComponents(ItemStack stack) {
-        var ops = RegistryOps.of(NbtOps.INSTANCE, MinecraftClient.getInstance().world.getRegistryManager());
+        World world = MinecraftClient.getInstance().world;
+        if (world == null)
+            return List.of();
+        var ops = RegistryOps.of(NbtOps.INSTANCE, world.getRegistryManager());
         var lines = new ArrayList<Text>();
         for (Component<?> component : stack.getComponents()) {
             component.encode(ops).mapOrElse(
