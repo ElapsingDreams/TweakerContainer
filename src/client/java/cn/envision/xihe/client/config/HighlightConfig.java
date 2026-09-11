@@ -1,89 +1,178 @@
 package cn.envision.xihe.client.config;
 
-import com.google.gson.Gson;
-import com.google.gson.GsonBuilder;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
 import com.mojang.logging.LogUtils;
+import fi.dy.masa.malilib.config.ConfigUtils;
+import fi.dy.masa.malilib.config.IConfigBase;
+import fi.dy.masa.malilib.config.IConfigHandler;
+import fi.dy.masa.malilib.config.options.ConfigBoolean;
+import fi.dy.masa.malilib.config.options.ConfigDouble;
+import fi.dy.masa.malilib.config.options.ConfigHotkey;
+import fi.dy.masa.malilib.config.options.ConfigInteger;
+import fi.dy.masa.malilib.config.options.ConfigString;
+import fi.dy.masa.malilib.util.FileUtils;
+import fi.dy.masa.malilib.util.JsonUtils;
 import net.minecraft.item.Item;
 import net.minecraft.item.Items;
 import net.minecraft.registry.Registries;
 import net.minecraft.util.Identifier;
 import org.slf4j.Logger;
 
-import java.io.File;
-import java.io.FileReader;
-import java.io.FileWriter;
-import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.List;
 
 /**
- * 高亮功能的开关与触发物品配置。
+ * 全部配置项都注册到 malilib，界面由 {@link cn.envision.xihe.client.gui.GuiConfigs} 提供。
+ * <p>
+ * 存档读写交给 malilib 的 {@link ConfigUtils}，开关变更会立即落盘。
  */
-public final class HighlightConfig {
+public class HighlightConfig implements IConfigHandler {
+    public static final String MOD_ID = "tweakerxihe";
+    private static final String CONFIG_FILE_NAME = MOD_ID + ".json";
+    private static final String GENERIC_KEY = "generic";
     private static final Logger LOGGER = LogUtils.getLogger();
-    private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
-    private static final File CONFIG_FILE = new File("config/xihe_highlight.json");
     private static final Item DEFAULT_TRIGGER_ITEM = Items.SHULKER_BOX;
 
-    private static volatile boolean enabled = false;
-    private static volatile boolean seeThrough = false;
-    private static Item triggerItem = DEFAULT_TRIGGER_ITEM;
+    private static final HighlightConfig INSTANCE = new HighlightConfig();
 
-    private HighlightConfig() {
+    // 触发物品要按帧查询，这里缓存解析结果，配置改了自动失效
+    private static volatile Item cachedTriggerItem = DEFAULT_TRIGGER_ITEM;
+    private static volatile String cachedTriggerItemId = "";
+
+    public static class Generic {
+        public static final ConfigBoolean ENABLED = new ConfigBoolean("enabled", false,
+                "自动高亮总开关，等同 /highlightblock start|stop");
+        public static final ConfigString TRIGGER_ITEM = new ConfigString("triggerItem", "minecraft:shulker_box",
+                "手持该物品时显示线框，填写物品 ID");
+        public static final ConfigBoolean SEE_THROUGH = new ConfigBoolean("seeThrough", false,
+                "线框穿透方块显示，等同 /highlightblock depth");
+        public static final ConfigBoolean HINT_IN_PLAYER_INVENTORY = new ConfigBoolean("hintInPlayerInventory", false,
+                "在玩家背包界面也显示投影容器的缺货提示");
+        public static final ConfigInteger HINT_TEXT_OFFSET_X = new ConfigInteger("hintTextOffsetX", 2, 0, 16,
+                "缺货数量文字相对槽位左上角向右的像素");
+        public static final ConfigInteger HINT_TEXT_OFFSET_Y = new ConfigInteger("hintTextOffsetY", 2, 0, 16,
+                "缺货数量文字相对槽位左上角向下的像素");
+        public static final ConfigDouble HINT_TEXT_SCALE = new ConfigDouble("hintTextScale", 1.0D, 0.25D, 2.0D,
+                "缺货数量文字的字号倍数");
+        public static final ConfigHotkey OPEN_CONFIG_GUI = new ConfigHotkey("openConfigGui", "",
+                "打开配置界面");
+
+        public static final List<IConfigBase> OPTIONS = List.of(
+                ENABLED,
+                TRIGGER_ITEM,
+                SEE_THROUGH,
+                HINT_IN_PLAYER_INVENTORY,
+                HINT_TEXT_OFFSET_X,
+                HINT_TEXT_OFFSET_Y,
+                HINT_TEXT_SCALE,
+                OPEN_CONFIG_GUI
+        );
     }
 
+    public static HighlightConfig getInstance() {
+        return INSTANCE;
+    }
+
+    // ---------- 供其它模块使用的读取入口 ----------
+
     public static boolean isEnabled() {
-        return enabled;
+        return Generic.ENABLED.getBooleanValue();
     }
 
     public static void setEnabled(boolean value) {
-        enabled = value;
+        Generic.ENABLED.setBooleanValue(value);
+        saveToFile();
     }
 
     public static boolean isSeeThrough() {
-        return seeThrough;
+        return Generic.SEE_THROUGH.getBooleanValue();
     }
 
     public static void setSeeThrough(boolean value) {
-        seeThrough = value;
-        save();
+        Generic.SEE_THROUGH.setBooleanValue(value);
+        saveToFile();
     }
 
     public static Item getTriggerItem() {
-        return triggerItem;
+        String itemId = Generic.TRIGGER_ITEM.getStringValue();
+        if (!itemId.equals(cachedTriggerItemId)) {
+            cachedTriggerItem = parseTriggerItem(itemId);
+            cachedTriggerItemId = itemId;
+        }
+        return cachedTriggerItem;
     }
 
     public static void setTriggerItem(Item item) {
         if (item == null) {
             return;
         }
-        triggerItem = item;
-        save();
+        Generic.TRIGGER_ITEM.setValueFromString(Registries.ITEM.getId(item).toString());
+        saveToFile();
     }
 
-    public static void load() {
-        if (!CONFIG_FILE.exists()) {
-            save();
+    public static boolean isHintInPlayerInventory() {
+        return Generic.HINT_IN_PLAYER_INVENTORY.getBooleanValue();
+    }
+
+    public static int getHintTextOffsetX() {
+        return Generic.HINT_TEXT_OFFSET_X.getIntegerValue();
+    }
+
+    public static int getHintTextOffsetY() {
+        return Generic.HINT_TEXT_OFFSET_Y.getIntegerValue();
+    }
+
+    public static float getHintTextScale() {
+        return (float) Generic.HINT_TEXT_SCALE.getDoubleValue();
+    }
+
+    // ---------- 存档 ----------
+
+    @Override
+    public void load() {
+        loadFromFile();
+    }
+
+    @Override
+    public void save() {
+        saveToFile();
+    }
+
+    public static void loadFromFile() {
+        Path file = FileUtils.getConfigDirectoryAsPath().resolve(CONFIG_FILE_NAME);
+
+        try {
+            if (!Files.exists(file)) {
+                return;
+            }
+
+            JsonElement element = JsonUtils.parseJsonFileAsPath(file);
+            if (element != null && element.isJsonObject()) {
+                JsonObject obj = element.getAsJsonObject();
+                ConfigUtils.readConfigBase(obj, GENERIC_KEY, Generic.OPTIONS);
+            } else {
+                LOGGER.warn("配置读取失败，使用默认值: {}", file.toAbsolutePath());
+            }
+        } catch (Exception e) {
+            LOGGER.warn("配置读取异常，使用默认值", e);
+        }
+    }
+
+    public static void saveToFile() {
+        Path configDir = FileUtils.getConfigDirectoryAsPath();
+        if (!Files.exists(configDir)) {
+            LOGGER.warn("配置目录不存在，跳过写入: {}", configDir.toAbsolutePath());
             return;
         }
 
-        try (FileReader reader = new FileReader(CONFIG_FILE)) {
-            ConfigData data = GSON.fromJson(reader, ConfigData.class);
-            triggerItem = parseTriggerItem(data != null ? data.triggerItem : null);
-            seeThrough = data != null && data.seeThrough;
-        } catch (IOException | RuntimeException e) {
-            LOGGER.warn("读取高亮配置失败，回退到默认触发物品", e);
-            triggerItem = DEFAULT_TRIGGER_ITEM;
-        }
-    }
-
-    public static void save() {
-        ConfigData data = new ConfigData();
-        data.triggerItem = Registries.ITEM.getId(triggerItem).toString();
-        data.seeThrough = seeThrough;
-
-        try (FileWriter writer = new FileWriter(CONFIG_FILE)) {
-            GSON.toJson(data, writer);
-        } catch (IOException e) {
-            LOGGER.warn("写入高亮配置失败", e);
+        try {
+            JsonObject obj = new JsonObject();
+            ConfigUtils.writeConfigBase(obj, GENERIC_KEY, Generic.OPTIONS);
+            JsonUtils.writeJsonToFileAsPath(obj, configDir.resolve(CONFIG_FILE_NAME));
+        } catch (Exception e) {
+            LOGGER.warn("配置写入失败", e);
         }
     }
 
@@ -99,12 +188,5 @@ public final class HighlightConfig {
 
         Item item = Registries.ITEM.get(identifier);
         return item != null ? item : DEFAULT_TRIGGER_ITEM;
-    }
-
-    private static class ConfigData {
-        // 缺省为 null，读取时按默认触发物品处理
-        private String triggerItem;
-        // 线框是否穿透方块显示
-        private boolean seeThrough;
     }
 }

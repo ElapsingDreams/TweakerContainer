@@ -1,6 +1,10 @@
 package cn.envision.xihe.client;
 
 import com.mojang.brigadier.arguments.IntegerArgumentType;
+import fi.dy.masa.malilib.config.ConfigManager;
+import fi.dy.masa.malilib.event.InputEventHandler;
+import fi.dy.masa.malilib.gui.GuiBase;
+import fi.dy.masa.malilib.hotkeys.KeyAction;
 import fi.dy.masa.malilib.util.data.ResourceLocation;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.api.EnvType;
@@ -14,6 +18,7 @@ import net.minecraft.text.Text;
 import net.minecraft.util.math.BlockPos;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import cn.envision.xihe.client.config.HighlightConfig;
+import cn.envision.xihe.client.gui.GuiConfigs;
 import cn.envision.xihe.client.handler.InteractionHandler;
 
 import static cn.envision.xihe.client.config.HighlightConfig.isEnabled;
@@ -26,7 +31,11 @@ public class TweakerXiheClient implements ClientModInitializer {
 
     @Override
     public void onInitializeClient() {
-        HighlightConfig.load();
+        // 配置交给 malilib 统一读写与显示，界面见 GuiConfigs
+        ConfigManager.getInstance().registerConfigHandler(HighlightConfig.MOD_ID, HighlightConfig.getInstance());
+        HighlightConfig.loadFromFile();
+        setupOpenConfigHotkey();
+
         BlockHighlighterRender.setup();
         InteractionHandler.setup();
 
@@ -58,8 +67,13 @@ public class TweakerXiheClient implements ClientModInitializer {
 
                                 context.getSource().sendFeedback(Text.literal("Clear All Highlight Block!"));
                                 return 1;
-                            })).
-                    then(literal("start")
+                            }))
+                    .then(literal("config")
+                            .executes(context -> {
+                                GuiBase.openGui(new GuiConfigs());
+                                return 1;
+                            }))
+                    .then(literal("start")
                             .executes(context -> {
                                 if (isEnabled()) {
                                     context.getSource().sendError(Text.literal("Auto Highlight Block Started!"));
@@ -107,5 +121,19 @@ public class TweakerXiheClient implements ClientModInitializer {
                             }))
             );
         });
+    }
+
+    // 用 malilib 的热键机制打开配置界面
+    private static void setupOpenConfigHotkey() {
+        HighlightConfig.Generic.OPEN_CONFIG_GUI.getKeybind().setCallback((action, keybind) -> {
+            if (action == KeyAction.PRESS) {
+                GuiBase.openGui(new GuiConfigs());
+                return true;
+            }
+            return false;
+        });
+
+        InputEventHandler.getKeybindManager().addKeybindToMap(HighlightConfig.Generic.OPEN_CONFIG_GUI.getKeybind());
+        InputEventHandler.getKeybindManager().updateUsedKeys();
     }
 }
