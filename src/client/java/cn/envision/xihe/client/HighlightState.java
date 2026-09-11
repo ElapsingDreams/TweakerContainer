@@ -4,8 +4,9 @@ import cn.envision.xihe.client.config.HighlightConfig;
 import cn.envision.xihe.client.features.PlacementContainerAccess;
 import fi.dy.masa.malilib.util.InventoryUtils;
 import fi.dy.masa.malilib.util.ItemType;
-import net.minecraft.block.Block;
 import net.minecraft.block.BlockState;
+import net.minecraft.block.ChestBlock;
+import net.minecraft.block.enums.ChestType;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.inventory.Inventory;
@@ -45,8 +46,10 @@ public final class HighlightState {
     private final Map<ItemType, Integer> remainingNeeded = new ConcurrentHashMap<>();
     private final Map<ItemType, Integer> projectionMissing = new ConcurrentHashMap<>();
     private final Map<BlockPos, Inventory> storageContainerCache = new ConcurrentHashMap<>();
-    // 登记时记下方块类型，用于复核这个位置是否还是原来那个容器
-    private final Map<BlockPos, Block> storageContainerBlocks = new ConcurrentHashMap<>();
+    // 登记时的方块状态，用于复核这个位置是否还是原来那个容器
+    private final Map<BlockPos, BlockState> storageContainerStates = new ConcurrentHashMap<>();
+    // 大箱子的另一半坐标，用于合成一个整体框与半箱失效时只丢一半
+    private final Map<BlockPos, BlockPos> storageContainerPartners = new ConcurrentHashMap<>();
     private final Set<BlockPos> storageContainers = ConcurrentHashMap.newKeySet();
     private final Set<BlockPos> matchingStorageContainers = ConcurrentHashMap.newKeySet();
     private final List<ItemStack> currentMissingItems = new CopyOnWriteArrayList<>();
@@ -337,45 +340,108 @@ public final class HighlightState {
         return pos;
     }
 
+    /**
+     * 缓存打开的容器内容。
+     * <p>
+     * 大箱子打开任意一半时界面给的都是整箱数据，这里按箱子朝向拆成两半、各自记到所在的那一格上：
+     * 同一份数据不会存两次，统计时也不会把整箱算两遍，被撬掉一半时只丢那一半。
+     *
+     * @param pos 玩家点击的那一格
+     * @param inv 界面提供的容器内容（大箱子时是整箱）
+     */
     public void cacheStorageInventory(BlockPos pos, Inventory inv) {
         if (pos == null || inv == null) {
             return;
         }
-        if (storageContainerCache.put(pos.toImmutable(), inv) != inv) {
+
+        BlockPos immutablePos = pos.toImmutable();
+        World world = MinecraftClient.getInstance().world;
+        BlockState state = world != null ? world.getBlockState(immutablePos) : null;
+
+        if (world != null && state != null && state.getBlock() instanceof ChestBlock) {
+            ChestType chestType = state.get(ChestBlock.CHEST_TYPE);
+            if (chestType != ChestType.SINGLE && inv.size() % 2 == 0) {
+                int halfSize = inv.size() / 2;
+                // 与 PlacementContainerAccess 的顺序保持一致：RIGHT 时本格那半在前
+                boolean selfFirst = chestType == ChestType.RIGHT;
+
+                putStorageContainer(immutablePos, copyRange(inv, selfFirst ? 0 : halfSize, halfSize), state);
+
+                BlockPos partner = immutablePos.add(ChestBlock.getFacing(state).getVector());
+                BlockState partnerState = world.getBlockState(partner);
+                if (partnerState.getBlock() instanceof ChestBlock) {
+                    putStorageContainer(partner, copyRange(inv, selfFirst ? halfSize : 0, halfSize), partnerState);
+                    storageContainerPartners.put(immutablePos, partner);
+                    storageContainerPartners.put(partner, immutablePos);
+                }
+                return;
+            }
+        }
+
+        putStorageContainer(immutablePos, inv, state);
+    }
+
+    private void putStorageContainer(BlockPos pos, Inventory inv, BlockState state) {
+        if (storageContainerCache.put(pos, inv) != inv || storageContainers.add(pos)) {
             markDirty();
         }
+        if (state != null) {
+            storageContainerStates.put(pos, state);
+        }
+    }
+
+    /** 复制容器的一段槽位，用于把整箱数据拆成两半。 */
+    private static SimpleInventory copyRange(Inventory source, int from, int size) {
+        SimpleInventory result = new SimpleInventory(size);
+        for (int i = 0; i < size; i++) {
+            result.setStack(i, source.getStack(from + i).copy());
+        }
+        return result;
     }
 
     public boolean isStorageContainer(BlockPos pos) {
         return pos != null && storageContainers.contains(pos.toImmutable());
     }
 
-    public void addStorageContainer(BlockPos pos, Block block) {
+    public void addStorageContainer(BlockPos pos, BlockState state) {
         if (pos == null) {
             return;
         }
 
         BlockPos immutablePos = pos.toImmutable();
-        if (block != null) {
-            storageContainerBlocks.put(immutablePos, block);
+        if (state != null) {
+            storageContainerStates.put(immutablePos, state);
         }
         if (storageContainers.add(immutablePos)) {
             markDirty();
         }
     }
 
+    /** 大箱子的另一半；不是大箱子或另一半已失效时返回 null。 */
+    public BlockPos getChestPartner(BlockPos pos) {
+        return pos == null ? null : storageContainerPartners.get(pos);
+    }
+
     /**
-     * 该登记坐标当前是否还是原来那个方块。
+     * 该登记坐标当前是否还是原来那个容器。
      * <p>
-     * 纯客户端做法：只比对登记的方块类型。容器内容不能用来判断——服务端不会把未打开容器的内容下发给客户端；
+     * 纯客户端做法：只比对登记的方块状态。容器内容不能用来判断——服务端不会把未打开容器的内容下发给客户端；
      * 区块未加载时不做判定，避免走远一趟回来登记被误删。
      */
     public boolean isStorageContainerPresent(BlockPos pos, World world) {
-        Block expected = storageContainerBlocks.get(pos);
+        BlockState expected = storageContainerStates.get(pos);
         if (expected == null || !world.isPosLoaded(pos)) {
             return true;
         }
-        return world.getBlockState(pos).getBlock() == expected;
+
+        BlockState current = world.getBlockState(pos);
+        if (current.getBlock() != expected.getBlock()) {
+            return false;
+        }
+
+        // 大箱子被撬掉一半后，另一半会变成单箱，箱子类型变了同样视为不再是原来那个容器
+        return !(current.getBlock() instanceof ChestBlock)
+                || current.get(ChestBlock.CHEST_TYPE) == expected.get(ChestBlock.CHEST_TYPE);
     }
 
     /** 复核登记的仓储容器：被撬掉或换成别的方块就取消登记，顺带清掉过期缓存。 */
@@ -400,7 +466,14 @@ public final class HighlightState {
         BlockPos immutablePos = pos.toImmutable();
         boolean changed = storageContainers.remove(immutablePos);
         changed |= storageContainerCache.remove(immutablePos) != null;
-        storageContainerBlocks.remove(immutablePos);
+        storageContainerStates.remove(immutablePos);
+
+        // 大箱子：解除配对，让剩下的那一半按单箱绘制、并保留自己那半数据
+        BlockPos partner = storageContainerPartners.remove(immutablePos);
+        if (partner != null) {
+            storageContainerPartners.remove(partner);
+        }
+
         if (changed) {
             markDirty();
         }
@@ -499,7 +572,8 @@ public final class HighlightState {
     public void clearAll() {
         storageContainers.clear();
         storageContainerCache.clear();
-        storageContainerBlocks.clear();
+        storageContainerStates.clear();
+        storageContainerPartners.clear();
         matchingStorageContainers.clear();
         remainingNeeded.clear();
         projectionMissing.clear();
