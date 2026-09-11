@@ -146,7 +146,8 @@ public abstract class HandledScreenMixin<T extends ScreenHandler> {
             if (!isFirstMatchSlot(need.key(), playerSlot)) {
                 return 0;
             }
-            xiheShowCount = true;
+            // 容器格子（潜影盒、收纳袋）只标色，不在盒子上写它内部物品的数量
+            xiheShowCount = !need.nested();
             return playerSlot ? HighlightConfig.getSlotPutColor() : HighlightConfig.getSlotTakeColor();
         }
 

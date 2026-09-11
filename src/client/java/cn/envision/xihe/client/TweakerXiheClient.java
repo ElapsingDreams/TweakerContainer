@@ -29,7 +29,6 @@ public class TweakerXiheClient implements ClientModInitializer {
 
     // 与 malilib 自身的 CallbackOpenConfigGui 一致：不判断 KeyAction，触发即开
     private static final IHotkeyCallback OPEN_CONFIG_GUI_CALLBACK = (action, keybind) -> {
-        LOGGER.info("openConfigGui 热键触发, action={}", action);
         GuiBase.openGui(new GuiConfigs());
         return true;
     };

@@ -62,11 +62,11 @@ public class InventoryOverlay {
         if (LocalPlacementPos.get(pos).isPresent()) {
             // 是投影容器则登记为投影来源，读取不到内容时退化为仓储容器
             if (!highlightState.setCurrentProjectionContainer(pos)) {
-                highlightState.addStorageContainer(pos);
+                highlightState.addStorageContainer(pos, state.getBlock());
             }
         } else {
             // 不是投影容器，作为仓储容器处理；重复打开只会刷新
-            highlightState.addStorageContainer(pos);
+            highlightState.addStorageContainer(pos, state.getBlock());
         }
         getInstance().currentContainerPos = pos;
         return true;

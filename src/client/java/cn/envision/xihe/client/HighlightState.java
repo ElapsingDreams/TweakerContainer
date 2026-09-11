@@ -4,6 +4,7 @@ import cn.envision.xihe.client.config.HighlightConfig;
 import cn.envision.xihe.client.features.PlacementContainerAccess;
 import fi.dy.masa.malilib.util.InventoryUtils;
 import fi.dy.masa.malilib.util.ItemType;
+import net.minecraft.block.Block;
 import net.minecraft.block.BlockState;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.entity.player.PlayerEntity;
@@ -44,6 +45,8 @@ public final class HighlightState {
     private final Map<ItemType, Integer> remainingNeeded = new ConcurrentHashMap<>();
     private final Map<ItemType, Integer> projectionMissing = new ConcurrentHashMap<>();
     private final Map<BlockPos, Inventory> storageContainerCache = new ConcurrentHashMap<>();
+    // 登记时记下方块类型，用于复核这个位置是否还是原来那个容器
+    private final Map<BlockPos, Block> storageContainerBlocks = new ConcurrentHashMap<>();
     private final Set<BlockPos> storageContainers = ConcurrentHashMap.newKeySet();
     private final Set<BlockPos> matchingStorageContainers = ConcurrentHashMap.newKeySet();
     private final List<ItemStack> currentMissingItems = new CopyOnWriteArrayList<>();
@@ -137,9 +140,13 @@ public final class HighlightState {
     // ---------- 槽位提示查询 ----------
 
     /**
-     * 槽位匹配到的需求：{@code key} 是需求物品的聚合键，{@code amount} 是它的需求总量。
+     * 槽位匹配到的需求。
+     *
+     * @param key    需求物品的聚合键
+     * @param amount 该需求的总量
+     * @param nested 是否由容器内部内容命中（为 true 时只标色，不在盒子上写数量）
      */
-    public record SlotNeed(ItemType key, int amount) {
+    public record SlotNeed(ItemType key, int amount, boolean nested) {
     }
 
     /**
@@ -161,7 +168,7 @@ public final class HighlightState {
         ItemType self = keyOf(stack);
         Integer direct = source.get(self);
         if (direct != null && direct > 0) {
-            return new SlotNeed(self, direct);
+            return new SlotNeed(self, direct, false);
         }
 
         return nestedNeed(source, stack, MAX_NESTING_DEPTH);
@@ -181,7 +188,7 @@ public final class HighlightState {
             ItemType key = keyOf(nested);
             Integer amount = needed.get(key);
             if (amount != null && amount > 0) {
-                return new SlotNeed(key, amount);
+                return new SlotNeed(key, amount, true);
             }
 
             SlotNeed deeper = nestedNeed(needed, nested, depth - 1);
@@ -240,6 +247,7 @@ public final class HighlightState {
 
     public void updateMatching() {
         dirty = false;
+        validateStorageContainers();
         matchingStorageContainers.clear();
         remainingNeeded.clear();
         projectionMissing.clear();
@@ -342,9 +350,45 @@ public final class HighlightState {
         return pos != null && storageContainers.contains(pos.toImmutable());
     }
 
-    public void addStorageContainer(BlockPos pos) {
-        if (pos != null && storageContainers.add(pos.toImmutable())) {
+    public void addStorageContainer(BlockPos pos, Block block) {
+        if (pos == null) {
+            return;
+        }
+
+        BlockPos immutablePos = pos.toImmutable();
+        if (block != null) {
+            storageContainerBlocks.put(immutablePos, block);
+        }
+        if (storageContainers.add(immutablePos)) {
             markDirty();
+        }
+    }
+
+    /**
+     * 该登记坐标当前是否还是原来那个方块。
+     * <p>
+     * 纯客户端做法：只比对登记的方块类型。容器内容不能用来判断——服务端不会把未打开容器的内容下发给客户端；
+     * 区块未加载时不做判定，避免走远一趟回来登记被误删。
+     */
+    public boolean isStorageContainerPresent(BlockPos pos, World world) {
+        Block expected = storageContainerBlocks.get(pos);
+        if (expected == null || !world.isPosLoaded(pos)) {
+            return true;
+        }
+        return world.getBlockState(pos).getBlock() == expected;
+    }
+
+    /** 复核登记的仓储容器：被撬掉或换成别的方块就取消登记，顺带清掉过期缓存。 */
+    private void validateStorageContainers() {
+        World world = MinecraftClient.getInstance().world;
+        if (world == null) {
+            return;
+        }
+
+        for (BlockPos pos : storageContainers) {
+            if (!isStorageContainerPresent(pos, world)) {
+                removeStorageContainer(pos);
+            }
         }
     }
 
@@ -356,6 +400,7 @@ public final class HighlightState {
         BlockPos immutablePos = pos.toImmutable();
         boolean changed = storageContainers.remove(immutablePos);
         changed |= storageContainerCache.remove(immutablePos) != null;
+        storageContainerBlocks.remove(immutablePos);
         if (changed) {
             markDirty();
         }
@@ -454,6 +499,7 @@ public final class HighlightState {
     public void clearAll() {
         storageContainers.clear();
         storageContainerCache.clear();
+        storageContainerBlocks.clear();
         matchingStorageContainers.clear();
         remainingNeeded.clear();
         projectionMissing.clear();

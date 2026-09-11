@@ -69,7 +69,10 @@ public final class BlockHighlighterRender {
 
         if (isHoldingTrigger) {
             for (BlockPos storagePos : state.getStorageContainers()) {
-                renderOutline(cameraPos, storagePos, HighlightConfig.getStorageContainerColor(), throughWalls);
+                // 方块被撬掉或换掉后不再绘制，避免原地留下幽灵框
+                if (state.isStorageContainerPresent(storagePos, client.world)) {
+                    renderOutline(cameraPos, storagePos, HighlightConfig.getStorageContainerColor(), throughWalls);
+                }
             }
 
             BlockPos projectionContainer = state.getCurrentProjectionContainer();
