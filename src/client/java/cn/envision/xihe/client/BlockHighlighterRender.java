@@ -26,7 +26,7 @@ public final class BlockHighlighterRender {
     private static final int COLOR_MANUAL = 0xFFFF00FF;     // 品红（/highlightblock 手动标记）
 
     // 线框相对方块表面的外扩量（格），避免与方块表面 z-fighting，同 Litematica 的 expand 参数
-    private static final float EXPAND = 0.002F;
+    private static final float EXPAND = 0.005F;  //0.002F
     // 线宽（像素），同 Litematica 的 renderBlockOutline 参数
     private static final float LINE_WIDTH = 1.0F;
 

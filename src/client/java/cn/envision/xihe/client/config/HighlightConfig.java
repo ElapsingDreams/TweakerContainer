@@ -56,8 +56,10 @@ public class HighlightConfig implements IConfigHandler {
                 "缺货数量文字相对槽位左上角向下的像素");
         public static final ConfigDouble HINT_TEXT_SCALE = new ConfigDouble("hintTextScale", 1.0D, 0.25D, 2.0D,
                 "缺货数量文字的字号倍数");
-        public static final ConfigHotkey OPEN_CONFIG_GUI = new ConfigHotkey("openConfigGui", "",
+        public static final ConfigHotkey OPEN_CONFIG_GUI = new ConfigHotkey("openConfigGui", "Z,C",
                 "打开配置界面");
+        public static final ConfigHotkey MARK_TARGET_BLOCK = new ConfigHotkey("markTargetBlock", "",
+                "标记准星指向的方块，等同于原来的 /highlightblock x y z");
 
         public static final List<IConfigBase> OPTIONS = List.of(
                 ENABLED,
@@ -67,7 +69,8 @@ public class HighlightConfig implements IConfigHandler {
                 HINT_TEXT_OFFSET_X,
                 HINT_TEXT_OFFSET_Y,
                 HINT_TEXT_SCALE,
-                OPEN_CONFIG_GUI
+                OPEN_CONFIG_GUI,
+                MARK_TARGET_BLOCK
         );
     }
 
