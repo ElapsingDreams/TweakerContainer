@@ -1,8 +1,10 @@
 package cn.envision.xihe.client.mixins;
 
 import cn.envision.xihe.client.HighlightState;
+import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.gui.screen.ingame.HandledScreen;
+import net.minecraft.client.gui.screen.ingame.InventoryScreen;
 import net.minecraft.entity.player.PlayerInventory;
 import net.minecraft.item.ItemStack;
 import net.minecraft.screen.ScreenHandler;
@@ -17,8 +19,19 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import static cn.envision.xihe.client.config.HighlightConfig.isEnabled;
 import static cn.envision.xihe.client.features.InventoryOverlay.getCurrentContainerPos;
 
+/**
+ * 容器界面的缺货提示：在槽位上标出还缺的物品，并在左下角写上数量。
+ * <p>
+ * 打开投影容器时提示背包里该放进去多少，打开仓储容器时提示该取出来多少。
+ */
 @Mixin(HandledScreen.class)
 public abstract class HandledScreenMixin<T extends ScreenHandler> {
+    // 该放进投影容器的物品
+    @Unique
+    private static final int XIHE_SLOT_COLOR_PUT = 0x8040FF40;
+    // 该从仓储取出的物品
+    @Unique
+    private static final int XIHE_SLOT_COLOR_TAKE = 0x6000FF00;
 
     @Inject(method = "close",
         at = @At("RETURN"),
@@ -36,44 +49,89 @@ public abstract class HandledScreenMixin<T extends ScreenHandler> {
             cancellable = false
     )
     private void onDrawSlot(DrawContext context, Slot slot, CallbackInfo ci) {
-        if (slot.inventory instanceof PlayerInventory) {
-            return;
-        }
         if (!isEnabled()) return;
 
         HighlightState state = HighlightState.get();
 
-        // 只在右击容器后缓存容器内容；玩家背包的合成格等非容器槽位不写入缓存
-        BlockPos clickedPos = state.getAndClearTempProcessingPos();
-        if (clickedPos != null) {
-            state.cacheStorageInventory(clickedPos, slot.inventory);
+        // 只在右击容器后缓存容器内容；背包侧（含合成格）不写入缓存
+        if (!(slot.inventory instanceof PlayerInventory)) {
+            BlockPos clickedPos = state.getAndClearTempProcessingPos();
+            if (clickedPos != null) {
+                state.cacheStorageInventory(clickedPos, slot.inventory);
+            }
         }
 
         // 标脏或超过刷新间隔时才重算，不再逐槽全量重建
         state.ensureUpToDate();
 
-        ItemStack currentStack = slot.getStack();
-        if (currentStack.isEmpty()) {
-            return;
-        }
-        BlockPos currentProjectionContainer = state.getCurrentProjectionContainer();
-        BlockPos currentContainerPos = getCurrentContainerPos();
-        if (currentProjectionContainer != null && currentContainerPos != null) {
-            if (currentProjectionContainer.equals(currentContainerPos)) return;
-
-            // 剩余需求表本身就只包含仍然缺少的物品
-            if (state.getRemainingNeeded().getOrDefault(currentStack.getItem(), 0) > 0) {
-                drawFoundItemHighlight(context, slot);
-            }
+        // 背景必须画在物品之前，否则会盖住图标
+        int color = getHighlightColor(state, slot);
+        if (color != 0) {
+            context.fill(slot.x, slot.y, slot.x + 16, slot.y + 16, color);
         }
     }
 
-    @Unique
-    private void drawFoundItemHighlight(DrawContext context, Slot slot) {
+    @Inject(
+            method = "drawSlot",
+            at = @At("RETURN"),
+            cancellable = false
+    )
+    private void onDrawSlotCount(DrawContext context, Slot slot, CallbackInfo ci) {
+        if (!isEnabled()) return;
 
-        int slotSize = 16;
-        int x = slot.x + 1;
-        int y = slot.y + 1;
-        context.fill(x - 1, y - 1, x + slotSize - 1, y + slotSize - 1, 0x6000FF00);
+        ItemStack stack = slot.getStack();
+        if (stack.isEmpty()) return;
+
+        int needed = getNeededAmount(HighlightState.get(), slot);
+        if (needed <= 0) return;
+
+        // 模仿原版的数量文字，但画到左下角，避开原版画在右下角的堆叠数量
+        int count = Math.min(stack.getCount(), needed);
+        context.drawText(MinecraftClient.getInstance().textRenderer,
+                Integer.toString(count), slot.x + 1, slot.y + 9, 0xFFFFFFFF, true);
+    }
+
+    /**
+     * @return 需要高亮时的背景色，0 表示不需要
+     */
+    @Unique
+    private int getHighlightColor(HighlightState state, Slot slot) {
+        if (getNeededAmount(state, slot) <= 0) {
+            return 0;
+        }
+        return isProjectionContainerOpen(state) ? XIHE_SLOT_COLOR_PUT : XIHE_SLOT_COLOR_TAKE;
+    }
+
+    /**
+     * 该槽位还要处理多少个物品，0 表示不用管。
+     * <p>
+     * 投影容器只提示背包侧（要放进去的），仓储容器只提示容器侧（要取出来的）。
+     */
+    @Unique
+    private int getNeededAmount(HighlightState state, Slot slot) {
+        ItemStack stack = slot.getStack();
+        if (stack.isEmpty()) return 0;
+        if (getCurrentContainerPos() == null) return 0;
+
+        boolean playerSlot = slot.inventory instanceof PlayerInventory;
+
+        // 投影容器自身还缺多少，就是背包里该放进去多少
+        if (isProjectionContainerOpen(state)) {
+            return playerSlot ? state.getProjectionMissing().getOrDefault(stack.getItem(), 0) : 0;
+        }
+
+        // 仓储容器里还能补上缺口的，就是该取出来多少
+        return playerSlot ? 0 : state.getRemainingNeeded().getOrDefault(stack.getItem(), 0);
+    }
+
+    @Unique
+    private boolean isProjectionContainerOpen(HighlightState state) {
+        BlockPos projectionContainer = state.getCurrentProjectionContainer();
+        BlockPos currentContainer = getCurrentContainerPos();
+        if (projectionContainer == null || currentContainer == null) {
+            return false;
+        }
+        // 玩家背包界面不参与提示，免得关掉容器后按 E 也被标色
+        return projectionContainer.equals(currentContainer) && !((Object) this instanceof InventoryScreen);
     }
 }

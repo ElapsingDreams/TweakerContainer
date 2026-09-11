@@ -30,6 +30,8 @@ public final class HighlightState {
     private static final HighlightState INSTANCE = new HighlightState();
 
     private final Map<Item, Integer> remainingNeeded = new ConcurrentHashMap<>();
+    // 投影容器自身还缺多少（按物品汇总），用于提示背包里该放多少个
+    private final Map<Item, Integer> projectionMissing = new ConcurrentHashMap<>();
     private final Map<BlockPos, Inventory> storageContainerCache = new ConcurrentHashMap<>();
     private final Set<BlockPos> highlightedBlocks = ConcurrentHashMap.newKeySet();
     private final Set<BlockPos> storageContainers = ConcurrentHashMap.newKeySet();
@@ -73,6 +75,10 @@ public final class HighlightState {
         return remainingNeeded;
     }
 
+    public Map<Item, Integer> getProjectionMissing() {
+        return projectionMissing;
+    }
+
     // ---------- 手动标记 ----------
 
     public void addHighlightedBlock(BlockPos pos) {
@@ -111,6 +117,7 @@ public final class HighlightState {
         dirty = false;
         matchingStorageContainers.clear();
         remainingNeeded.clear();
+        projectionMissing.clear();
         if (currentProjectionContainer == null || currentMissingItems.isEmpty()) {
             return;
         }
@@ -149,9 +156,19 @@ public final class HighlightState {
         }
 
         for (Map.Entry<Item, Integer> entry : neededTotal.entrySet()) {
-            int remaining = entry.getValue()
+            int required = entry.getValue();
+            int inContainer = projectionContainerCount.getOrDefault(entry.getKey(), 0);
+
+            // 投影容器自己还缺的，就是背包里该往里放的
+            int missing = required - inContainer;
+            if (missing > 0) {
+                projectionMissing.put(entry.getKey(), missing);
+            }
+
+            // 扣掉背包与容器里已有的，才是还要去仓储取的数量
+            int remaining = required
                     - playerInventoryCount.getOrDefault(entry.getKey(), 0)
-                    - projectionContainerCount.getOrDefault(entry.getKey(), 0);
+                    - inContainer;
 
             if (remaining > 0) {
                 remainingNeeded.put(entry.getKey(), remaining);
@@ -232,6 +249,7 @@ public final class HighlightState {
     public void removeProjectContainer() {
         currentProjectionContainer = null;
         currentMissingItems.clear();
+        projectionMissing.clear();
         markDirty();
     }
 
@@ -359,6 +377,7 @@ public final class HighlightState {
         highlightedBlocks.clear();
         matchingStorageContainers.clear();
         remainingNeeded.clear();
+        projectionMissing.clear();
         currentMissingItems.clear();
         currentProjectionContainer = null;
         tempProcessingPos = null;
