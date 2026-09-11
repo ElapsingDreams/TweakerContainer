@@ -11,6 +11,7 @@ import net.minecraft.client.gui.screen.ingame.ScreenHandlerProvider;
 import net.minecraft.entity.player.PlayerInventory;
 import net.minecraft.item.ItemStack;
 import net.minecraft.screen.ScreenHandler;
+import net.minecraft.screen.ScreenHandlerListener;
 import net.minecraft.screen.slot.Slot;
 import net.minecraft.util.math.BlockPos;
 import org.joml.Matrix3x2fStack;
@@ -81,9 +82,23 @@ public abstract class HandledScreenMixin<T extends ScreenHandler> {
         for (Slot slot : handler.slots) {
             if (!(slot.inventory instanceof PlayerInventory)) {
                 HighlightState.get().cacheStorageInventory(clickedPos, slot.inventory);
-                return;
+                break;
             }
         }
+
+        // 槽位一变就标脏：重算仍由 tick / 渲染的节流兜底，实际每帧最多算一次，
+        // 这样搬东西时槽位数字与匹配结果基本立刻跟上
+        handler.addListener(new ScreenHandlerListener() {
+            @Override
+            public void onSlotUpdate(ScreenHandler screenHandler, int slotId, ItemStack stack) {
+                HighlightState.get().markDirty();
+            }
+
+            @Override
+            public void onPropertyUpdate(ScreenHandler screenHandler, int property, int value) {
+                // 属性变化（例如熔炉进度）与容器物品无关，忽略
+            }
+        });
     }
 
     /**
