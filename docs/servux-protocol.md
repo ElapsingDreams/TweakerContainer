@@ -6,7 +6,8 @@
 ## 1. 通道与类型号
 
 - 通道：`servux:tweaks`（tweakeroo `ServuxTweaksHandler.CHANNEL_ID` 的静态初始化里 `ldc "servux"` + `ldc "tweaks"`）
-- 报文首部是 1 个 int = 类型号；类型号**不是** ordinal，枚举构造器 `Type(String name, int ordinal, int type)` 的第三个参数才是：
+- 报文首部是 **VarInt**（`PacketByteBuf.writeVarInt/readVarInt`，已用 `method_10804/method_10816` → `class_8703` 的 varint 辅助类核实）写的类型号；
+  类型号**不是** ordinal，枚举构造器 `Type(String name, int ordinal, int type)` 的第三个参数才是：
 
 | 枚举 | ordinal | 线上 type |
 |---|---|---|
@@ -25,12 +26,16 @@
 
 | 类型 | 载荷 |
 |---|---|
-| 1 / 2（metadata 收发） | `int type` + `NBT` |
-| 3（方块实体请求） | `int type` + `int transactionId` + `long pos`（`writeBlockPos`，即 `BlockPos.asLong()`） |
-| 4（实体请求） | `int type` + `int transactionId` + `int entityId` |
-| 5（方块 NBT 响应，常用） | `int type` + `long pos` + `NBT` |
-| 6（实体 NBT 响应） | `int type` + `int entityId` + `NBT` |
+| 1 / 2（metadata 收发） | `VarInt type` + `NBT` |
+| 3（方块实体请求） | `VarInt type` + `VarInt transactionId` + `long pos`（`writeBlockPos`，即 `BlockPos.asLong()`） |
+| 4（实体请求） | `VarInt type` + `VarInt transactionId` + `VarInt entityId` |
+| 5（方块 NBT 响应，常用） | `VarInt type` + `long pos` + `NBT` |
+| 6（实体 NBT 响应） | `VarInt type` + `VarInt entityId` + `NBT` |
 | 10 / 11 及 12 / 13 | 分片用的 `buffer`（`PacketSplitter`），单个容器 NBT 走不到 |
+
+> **已做字节级校验**：用反射调 tweakeroo 的 `toPacket`，与 `client/data/ServuxTweaksPacket` 的输出逐字节比对，
+> 方块实体请求（`03 FF FF FF FF 0F 00 01 34 BF FF CE B0 38`）与 metadata 请求都完全一致；
+> 反向也用我们自己的解码器读通了 tweakeroo 编出的 `SIMPLE` 响应（`type=5`、坐标与 NBT 都对）。
 
 ## 3. 握手与门禁（服务端侧，Servux 0.7.7）
 

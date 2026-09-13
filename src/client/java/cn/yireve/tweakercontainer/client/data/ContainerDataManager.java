@@ -90,8 +90,9 @@ public final class ContainerDataManager {
                 }
             }
             case SERVUX -> {
-                queryQueue.add(immutablePos);
-                this.pumpQueryQueue();
+                if (!this.requestFromServer(immutablePos)) {
+                    pending.remove(immutablePos);
+                }
             }
             // SCREEN：什么都不做，等开界面；AUTO 已经在 effectiveSource() 里解析掉了
             case AUTO, SCREEN -> pending.remove(immutablePos);
@@ -102,14 +103,19 @@ public final class ContainerDataManager {
     public ContainerSource effectiveSource() {
         ContainerSource configured = HighlightConfig.getContainerSource();
         boolean local = isLocalWorld();
-        boolean canQuery = this.canQuery();
+        boolean remote = this.canReachServer();
 
         return switch (configured) {
-            case AUTO -> local ? ContainerSource.INTEGRATED : (canQuery ? ContainerSource.SERVUX : ContainerSource.SCREEN);
+            case AUTO -> local ? ContainerSource.INTEGRATED : (remote ? ContainerSource.SERVUX : ContainerSource.SCREEN);
             case INTEGRATED -> local ? ContainerSource.INTEGRATED : ContainerSource.SCREEN;
-            case SERVUX -> canQuery ? ContainerSource.SERVUX : ContainerSource.SCREEN;
+            case SERVUX -> remote ? ContainerSource.SERVUX : ContainerSource.SCREEN;
             case SCREEN -> ContainerSource.SCREEN;
         };
+    }
+
+    /** 联机时是否有办法向服务端要数据：Servux 通道，或者原版 NBT 查询。 */
+    private boolean canReachServer() {
+        return ServuxTweaksChannel.get().isAvailable() || this.canQuery();
     }
 
     /** 掉线、换世界、清空高亮时重置查询状态（"这个服务器不支持查询"的标记也跟着清）。 */
@@ -146,6 +152,64 @@ public final class ContainerDataManager {
 
     // ---------- ② 服务端查询 ----------
 
+    /**
+     * 联机取数据：优先 Servux 自定义通道（非 OP 也能用），通道不可用再退回原版 NBT 查询（要权限≥2 或服务端放行）。
+     *
+     * @return 是否已经接下这次请求
+     */
+    private boolean requestFromServer(BlockPos pos) {
+        if (ServuxTweaksChannel.get().requestBlockEntity(pos)) {
+            return true;
+        }
+
+        if (!this.canQuery()) {
+            return false;
+        }
+
+        this.queryQueue.add(pos);
+        this.pumpQueryQueue();
+        return true;
+    }
+
+    /** Servux 通道拿到了方块实体 NBT。 */
+    void onServuxBlockEntityData(BlockPos pos, NbtCompound nbt) {
+        this.pending.remove(pos);
+        this.acceptServerContents(pos, nbt);
+    }
+
+    /** 服务端给的方块实体 NBT：转成背包写进缓存，大箱子顺手把另一半也带上。 */
+    private void acceptServerContents(BlockPos pos, NbtCompound nbt) {
+        Inventory inventory = inventoryFromNbt(nbt);
+        if (inventory == null) {
+            return;
+        }
+
+        World world = MinecraftClient.getInstance().world;
+        BlockState state = world != null ? world.getBlockState(pos) : null;
+        HighlightState.get().acceptStorageContents(pos, state, inventory);
+        this.ensureChestPartner(pos, state);
+    }
+
+    /** Servux 通道这次请求超时了。 */
+    void onServuxTimeout(BlockPos pos) {
+        this.pending.remove(pos);
+    }
+
+    /** Servux 通道判定不可用：把还在排队的位置交给原版查询，别让它们卡在 pending 里。 */
+    void onServuxUnavailable(Iterable<BlockPos> queued) {
+        boolean query = this.canQuery();
+
+        for (BlockPos pos : queued) {
+            if (query && !HighlightState.get().hasContents(pos)) {
+                this.queryQueue.add(pos.toImmutable());
+            } else {
+                this.pending.remove(pos);
+            }
+        }
+
+        this.pumpQueryQueue();
+    }
+
     private boolean canQuery() {
         return !this.queryUnsupported && MinecraftClient.getInstance().getNetworkHandler() != null;
     }
@@ -181,15 +245,7 @@ public final class ContainerDataManager {
         this.inFlight = null;
         this.pending.remove(pos);
         this.consecutiveFailures = 0;
-
-        Inventory inventory = inventoryFromNbt(nbt);
-        if (inventory != null) {
-            World world = MinecraftClient.getInstance().world;
-            BlockState state = world != null ? world.getBlockState(pos) : null;
-            HighlightState.get().acceptStorageContents(pos, state, inventory);
-            this.ensureChestPartner(pos, state);
-        }
-
+        this.acceptServerContents(pos, nbt);
         this.pumpQueryQueue();
     }
 
