@@ -15,6 +15,8 @@
   "tweakercontainer.config.containerSource.integrated": "内置服务端",
   "tweakercontainer.config.containerSource.servux": "服务端查询",
   "tweakercontainer.config.containerSource.screen": "只用开界面",
+  "tweakercontainer.config.generic.name.containerRefreshInterval": "容器内容重取间隔",
+  "tweakercontainer.config.generic.comment.containerRefreshInterval": "已标记容器每隔多少 tick 重新取一次内容，用来跟上别的玩家改动。20 tick = 1 秒，0 表示不自动重取",
   "tweakercontainer.config.generic.name.strictNbt": "严格校验 NBT",
   "tweakercontainer.config.generic.comment.strictNbt": "严格校验 NBT：物品组件不一致时不计入缺失，也不互相顶替数量",
   "tweakercontainer.config.generic.name.nbtMismatchColor": "NBT 不同改色",

@@ -33,6 +33,10 @@
 | 6（实体 NBT 响应） | `VarInt type` + `VarInt entityId` + `NBT` |
 | 10 / 11 及 12 / 13 | 分片用的 `buffer`（`PacketSplitter`），单个容器 NBT 走不到 |
 
+> 分片阈值（`servux.network.PacketSplitter` 的常量）：单包总量上限 `1048571` 字节、接收上限 `134217728` 字节。
+> 也就是说**只有单条载荷超过约 1 MB 才会分片**；一个容器的方块实体 NBT（哪怕是塞满潜影盒的大箱子）远不到这个量级，
+> 而嵌套容器（箱子里的潜影盒里再装东西）的内容本来就随该容器的 NBT 一起下发，不需要额外循环请求。所以分片这条我们不需要实现。
+
 > **已做字节级校验**：用反射调 tweakeroo 的 `toPacket`，与 `client/data/ServuxTweaksPacket` 的输出逐字节比对，
 > 方块实体请求（`03 FF FF FF FF 0F 00 01 34 BF FF CE B0 38`）与 metadata 请求都完全一致；
 > 反向也用我们自己的解码器读通了 tweakeroo 编出的 `SIMPLE` 响应（`type=5`、坐标与 NBT 都对）。

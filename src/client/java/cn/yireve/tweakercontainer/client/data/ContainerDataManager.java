@@ -2,8 +2,8 @@ package cn.yireve.tweakercontainer.client.data;
 
 import cn.yireve.tweakercontainer.client.HighlightState;
 import cn.yireve.tweakercontainer.client.config.HighlightConfig;
+import com.mojang.logging.LogUtils;
 import fi.dy.masa.malilib.util.InventoryUtils;
-import fi.dy.masa.malilib.util.WorldUtils;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.minecraft.block.BlockState;
 import net.minecraft.block.ChestBlock;
@@ -12,13 +12,18 @@ import net.minecraft.block.enums.ChestType;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.network.ClientPlayNetworkHandler;
 import net.minecraft.client.network.DataQueryHandler;
+import net.minecraft.client.world.ClientWorld;
+import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.inventory.Inventory;
 import net.minecraft.inventory.SimpleInventory;
 import net.minecraft.nbt.NbtCompound;
 import net.minecraft.registry.DynamicRegistryManager;
+import net.minecraft.server.integrated.IntegratedServer;
 import net.minecraft.server.world.ServerWorld;
 import net.minecraft.util.math.BlockPos;
+import net.minecraft.util.math.Vec3d;
 import net.minecraft.world.World;
+import org.slf4j.Logger;
 
 import java.util.ArrayDeque;
 import java.util.Deque;
@@ -28,23 +33,31 @@ import java.util.concurrent.ConcurrentHashMap;
 /**
  * 容器内容的获取，按配置走三条路：
  * <ol>
- *   <li><b>内置服务端直读</b>：本地世界（单人、局域网主机）里 {@link WorldUtils#getBestWorld} 给的就是服务端世界，
- *       直接读方块实体。不需要任何其它模组——客户端世界只有开界面时才会被同步，服务端手里才有真数据。</li>
- *   <li><b>服务端查询</b>：发原版 {@code QueryBlockNbtC2SPacket}（{@link DataQueryHandler#queryBlockNbt}），
- *       服务端装了 Servux 时它的 {@code MixinServerPlayNetworkHandler_QueryNbt} 会把要求的权限等级从 2 放到 0，
- *       非 OP 也能拿到方块实体 NBT（含容器物品）。原版服务端对权限不足的查询是静默忽略、不会踢人，
+ *   <li><b>内置服务端直读</b>：本地世界（单人、局域网主机）直接读内置服务端的方块实体。
+ *       不需要任何其它模组——客户端世界只有开界面时才会被同步，服务端手里才有真数据。
+ *       读不到（区块没加载、方块实体还没同步等）会自动退到服务端查询，单人主机有权限，一定问得到。</li>
+ *   <li><b>服务端查询</b>：先走 Servux 自定义通道，再退原版 {@code QueryBlockNbtC2SPacket}
+ *       （{@link DataQueryHandler#queryBlockNbt}）。原版服务端对权限不足的查询是静默忽略、不会踢人，
  *       所以可以放心试探：连续几次没回包就把这个服务器标记为不支持，退回开界面抓取。</li>
  *   <li><b>开界面抓取</b>：{@link HighlightState#cacheStorageInventory} 那条老链路，任何服务器都能用，作为回退。</li>
  * </ol>
  * 原版 {@link DataQueryHandler} 一次只挂一个回调，所以这里的查询严格串行：同一时刻只有一个在飞，其余排队。
+ * <p>
+ * 另外按配置的间隔（{@code containerRefreshInterval}）定时重取玩家附近已登记的容器，
+ * 应对"内容被别的玩家改动"。
  */
 public final class ContainerDataManager {
+    private static final Logger LOGGER = LogUtils.getLogger();
     private static final ContainerDataManager INSTANCE = new ContainerDataManager();
 
     /** 单次查询的等待上限（毫秒） */
     private static final long QUERY_TIMEOUT_MS = 2000L;
     /** 连续多少次查询没回包就认定这个服务器不支持查询 */
     private static final int QUERY_FAILURE_LIMIT = 3;
+    /** 一轮定时重取最多处理几个容器，免得对着服务端刷包 */
+    private static final int REFRESH_PER_CYCLE = 8;
+    /** 只重取玩家这么多格以内的容器 */
+    private static final double REFRESH_RANGE_SQ = 64.0D * 64.0D;
 
     /** 已经排队或正在查的坐标 */
     private final Set<BlockPos> pending = ConcurrentHashMap.newKeySet();
@@ -54,6 +67,7 @@ public final class ContainerDataManager {
     private long inFlightSince;
     private int consecutiveFailures;
     private boolean queryUnsupported;
+    private int refreshTicks;
 
     private ContainerDataManager() {
     }
@@ -63,8 +77,11 @@ public final class ContainerDataManager {
     }
 
     public static void setup() {
-        // 查询超时要靠 tick 推进，没有别的定时器
-        ClientTickEvents.END_CLIENT_TICK.register(client -> INSTANCE.tick());
+        // 查询超时与定时重取都靠 tick 推进，没有别的定时器
+        ClientTickEvents.END_CLIENT_TICK.register(client -> {
+            INSTANCE.tick();
+            INSTANCE.tickRefresh();
+        });
     }
 
     // ---------- 对外入口 ----------
@@ -74,29 +91,80 @@ public final class ContainerDataManager {
      * 已有内容、或已经在查的位置会直接跳过，所以重复右键不会反复发查询。
      */
     public void ensureContents(BlockPos pos, BlockState state) {
+        if (pos == null || state == null || HighlightState.get().hasContents(pos.toImmutable())) {
+            return;
+        }
+
+        this.fetch(pos, state);
+    }
+
+    /** 定时重取：不看缓存里有没有，照数据源再取一次（应对内容被别的玩家改动）。 */
+    public void refreshContents(BlockPos pos, BlockState state) {
+        this.fetch(pos, state);
+    }
+
+    private void fetch(BlockPos pos, BlockState state) {
         if (pos == null || state == null) {
             return;
         }
 
         BlockPos immutablePos = pos.toImmutable();
-        if (HighlightState.get().hasContents(immutablePos) || !pending.add(immutablePos)) {
-            return;
+        if (!this.pending.add(immutablePos)) {
+            return; // 这一格已经在取了
         }
 
         switch (this.effectiveSource()) {
             case INTEGRATED -> {
-                // 本地读是同步的，读完就撤掉"在查"标记：内容有没有由缓存自己说了算。
-                // 否则清掉标记再重新登记时会被这个残留标记挡住，永远不再取内容
+                // 本地读是同步的，读完就撤"在查"标记
                 this.readIntegrated(immutablePos, state);
-                pending.remove(immutablePos);
+                this.pending.remove(immutablePos);
+
+                // 内置服务端读不到就退到服务端查询：单人/主机玩家有权限，原版查询一定问得到
+                if (!HighlightState.get().hasContents(immutablePos)) {
+                    if (!this.requestFromServer(immutablePos)) {
+                        this.pending.remove(immutablePos);
+                    }
+                }
             }
             case SERVUX -> {
                 if (!this.requestFromServer(immutablePos)) {
-                    pending.remove(immutablePos);
+                    this.pending.remove(immutablePos);
                 }
             }
             // SCREEN：什么都不做，等开界面；AUTO 已经在 effectiveSource() 里解析掉了
-            case AUTO, SCREEN -> pending.remove(immutablePos);
+            case AUTO, SCREEN -> this.pending.remove(immutablePos);
+        }
+    }
+
+    /** 按配置的间隔重取玩家附近的容器。 */
+    private void tickRefresh() {
+        int interval = HighlightConfig.getContainerRefreshInterval();
+        if (interval <= 0 || !HighlightConfig.isEnabled() || ++this.refreshTicks < interval) {
+            return;
+        }
+
+        this.refreshTicks = 0;
+
+        MinecraftClient client = MinecraftClient.getInstance();
+        PlayerEntity player = client.player;
+        World world = client.world;
+        if (player == null || world == null) {
+            return;
+        }
+
+        Vec3d playerPos = player.getPos();
+        int budget = REFRESH_PER_CYCLE;
+
+        for (BlockPos pos : HighlightState.get().getStorageContainers()) {
+            if (budget <= 0) {
+                break;
+            }
+            if (this.pending.contains(pos) || playerPos.squaredDistanceTo(Vec3d.ofCenter(pos)) > REFRESH_RANGE_SQ) {
+                continue;
+            }
+
+            this.refreshContents(pos, world.getBlockState(pos));
+            budget--;
         }
     }
 
@@ -132,17 +200,32 @@ public final class ContainerDataManager {
 
     /** 本地世界（单人 / 局域网主机）才有内置服务端世界可读。 */
     private static boolean isLocalWorld() {
-        return WorldUtils.getBestWorld(MinecraftClient.getInstance()) instanceof ServerWorld;
+        return serverWorld() != null;
+    }
+
+    /** 内置服务端里与客户端同维度的那个世界；不是本地世界时返回 null。 */
+    private static World serverWorld() {
+        MinecraftClient client = MinecraftClient.getInstance();
+        IntegratedServer server = client.getServer();
+        ClientWorld clientWorld = client.world;
+        return server == null || clientWorld == null ? null : server.getWorld(clientWorld.getRegistryKey());
     }
 
     private boolean readIntegrated(BlockPos pos, BlockState state) {
-        World world = WorldUtils.getBestWorld(MinecraftClient.getInstance());
-        if (!(world instanceof ServerWorld) || !world.isPosLoaded(pos)) {
+        World world = serverWorld();
+        if (world == null) {
+            LOGGER.warn("内置服务端世界取不到，位置 {} 改走服务端查询", pos);
+            return false;
+        }
+
+        if (!world.isPosLoaded(pos)) {
+            LOGGER.warn("内置服务端说 {} 所在区块没加载，改走服务端查询", pos);
             return false;
         }
 
         BlockEntity blockEntity = world.getBlockEntity(pos);
         if (!(blockEntity instanceof Inventory inventory)) {
+            LOGGER.warn("内置服务端 {} 的方块实体不是容器（{}），改走服务端查询", pos, blockEntity);
             return false;
         }
 

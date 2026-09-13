@@ -81,12 +81,15 @@ public class HighlightConfig implements IConfigHandler {
                 .apply(GENERIC_TRANSLATION_PREFIX);
         public static final ConfigOptionList CONTAINER_SOURCE = new ConfigOptionList("containerSource", ContainerSource.AUTO)
                 .apply(GENERIC_TRANSLATION_PREFIX);
+        public static final ConfigInteger CONTAINER_REFRESH_INTERVAL = new ConfigInteger("containerRefreshInterval", 20, 0, 1200)
+                .apply(GENERIC_TRANSLATION_PREFIX);
 
         public static final List<IConfigBase> OPTIONS = List.of(
                 ENABLED,
                 TRIGGER_ITEM,
                 SEE_THROUGH,
                 CONTAINER_SOURCE,
+                CONTAINER_REFRESH_INTERVAL,
                 STRICT_NBT,
                 NBT_MISMATCH_COLOR,
                 READ_NESTED_CONTAINERS,
@@ -146,6 +149,11 @@ public class HighlightConfig implements IConfigHandler {
 
     public static boolean isSeeThrough() {
         return Generic.SEE_THROUGH.getBooleanValue();
+    }
+
+    /** 容器内容的重取间隔（tick），0 = 关掉自动重取。 */
+    public static int getContainerRefreshInterval() {
+        return Generic.CONTAINER_REFRESH_INTERVAL.getIntegerValue();
     }
 
     /** 容器内容的数据源；具体走哪条由 {@code ContainerDataManager} 结合实际环境解析。 */
