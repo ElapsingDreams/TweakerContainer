@@ -23,6 +23,7 @@ import net.minecraft.server.world.ServerWorld;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.Vec3d;
 import net.minecraft.world.World;
+import net.minecraft.world.chunk.WorldChunk;
 import org.slf4j.Logger;
 
 import java.util.ArrayDeque;
@@ -114,18 +115,7 @@ public final class ContainerDataManager {
         }
 
         switch (this.effectiveSource()) {
-            case INTEGRATED -> {
-                // 本地读是同步的，读完就撤"在查"标记
-                this.readIntegrated(immutablePos, state);
-                this.pending.remove(immutablePos);
-
-                // 内置服务端读不到就退到服务端查询：单人/主机玩家有权限，原版查询一定问得到
-                if (!HighlightState.get().hasContents(immutablePos)) {
-                    if (!this.requestFromServer(immutablePos)) {
-                        this.pending.remove(immutablePos);
-                    }
-                }
-            }
+            case INTEGRATED -> this.readIntegrated(immutablePos, state); // 读在服务端线程上跑，回调里收尾
             case SERVUX -> {
                 if (!this.requestFromServer(immutablePos)) {
                     this.pending.remove(immutablePos);
@@ -140,6 +130,11 @@ public final class ContainerDataManager {
     private void tickRefresh() {
         int interval = HighlightConfig.getContainerRefreshInterval();
         if (interval <= 0 || !HighlightConfig.isEnabled() || ++this.refreshTicks < interval) {
+            return;
+        }
+
+        // 上一轮还没消化完就先不动，免得把通道刷爆、把新登记挤出去
+        if (!this.pending.isEmpty()) {
             return;
         }
 
@@ -163,7 +158,10 @@ public final class ContainerDataManager {
                 continue;
             }
 
-            this.refreshContents(pos, world.getBlockState(pos));
+            BlockState state = world.getBlockState(pos);
+            this.refreshContents(pos, state);
+            // 上一轮没配上对的大箱子（另一半那次请求失败）在这里补上，否则会一直只画一半
+            this.ensureChestPartner(pos, state);
             budget--;
         }
     }
@@ -211,27 +209,64 @@ public final class ContainerDataManager {
         return server == null || clientWorld == null ? null : server.getWorld(clientWorld.getRegistryKey());
     }
 
-    private boolean readIntegrated(BlockPos pos, BlockState state) {
+    /**
+     * 内置服务端读某一格的容器内容。
+     * <p>
+     * 服务端世界只能在服务端线程上碰，所以扔到服务端线程去读，读完再把结果送回客户端线程收尾。
+     */
+    private void readIntegrated(BlockPos pos, BlockState state) {
+        MinecraftClient client = MinecraftClient.getInstance();
+        IntegratedServer server = client.getServer();
         World world = serverWorld();
-        if (world == null) {
+
+        if (server == null || world == null) {
             LOGGER.warn("内置服务端世界取不到，位置 {} 改走服务端查询", pos);
-            return false;
+            this.finishIntegrated(pos, state, null);
+            return;
         }
 
-        if (!world.isPosLoaded(pos)) {
-            LOGGER.warn("内置服务端说 {} 所在区块没加载，改走服务端查询", pos);
-            return false;
+        server.execute(() -> {
+            Inventory inventory = readBlockEntityInventory(world, pos);
+            client.execute(() -> this.finishIntegrated(pos, state, inventory));
+        });
+    }
+
+    /** 内置直读的结果回到客户端线程后收尾：成功写缓存，失败退服务端查询。 */
+    private void finishIntegrated(BlockPos pos, BlockState state, Inventory inventory) {
+        this.pending.remove(pos);
+
+        if (inventory != null) {
+            HighlightState.get().acceptStorageContents(pos, state, inventory);
+            this.ensureChestPartner(pos, state);
+            return;
         }
 
+        if (!this.requestFromServer(pos)) {
+            this.pending.remove(pos);
+        }
+    }
+
+    /**
+     * 在服务端线程上取方块实体的背包。
+     * <p>
+     * 区块在、方块实体却还没建出来时会催一次（`CreationType.IMMEDIATE`）；
+     * 单人世界这些数据本来就在内存里，代价很小。
+     */
+    private static Inventory readBlockEntityInventory(World world, BlockPos pos) {
         BlockEntity blockEntity = world.getBlockEntity(pos);
-        if (!(blockEntity instanceof Inventory inventory)) {
-            LOGGER.warn("内置服务端 {} 的方块实体不是容器（{}），改走服务端查询", pos, blockEntity);
-            return false;
+
+        if (!(blockEntity instanceof Inventory) && world.isPosLoaded(pos)) {
+            WorldChunk chunk = world.getChunk(pos.getX() >> 4, pos.getZ() >> 4);
+            blockEntity = chunk.getBlockEntity(pos, WorldChunk.CreationType.IMMEDIATE);
         }
 
-        HighlightState.get().acceptStorageContents(pos, state, copyOf(inventory));
-        this.ensureChestPartner(pos, state);
-        return true;
+        if (blockEntity instanceof Inventory inventory) {
+            return copyOf(inventory);
+        }
+
+        LOGGER.warn("内置服务端 {} 取不到容器内容：服务端方块={}，方块实体={}，区块已加载={}",
+                pos, world.getBlockState(pos), blockEntity, world.isPosLoaded(pos));
+        return null;
     }
 
     // ---------- ② 服务端查询 ----------

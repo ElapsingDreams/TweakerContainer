@@ -36,6 +36,8 @@ public final class ServuxTweaksChannel {
     private static final int MAX_FAILURES = 3;
     /** 同时在飞的请求上限，避免对着服务端刷包。 */
     private static final int MAX_PENDING = 32;
+    /** 这条通道失败后的冷却时间，过后重新握手再试（不然一次抖动就废掉整个会话）。 */
+    private static final long RETRY_COOLDOWN_MS = 30_000L;
 
     private static final ServuxTweaksChannel INSTANCE = new ServuxTweaksChannel();
 
@@ -48,7 +50,7 @@ public final class ServuxTweaksChannel {
     private boolean handshakeSent;
     private long handshakeSentAt;
     private boolean servuxConfirmed;
-    private boolean channelFailed;
+    private long failedUntil;
     private int failures;
 
     private ServuxTweaksChannel() {
@@ -99,13 +101,13 @@ public final class ServuxTweaksChannel {
         this.waiting.clear();
         this.handshakeSent = false;
         this.servuxConfirmed = false;
-        this.channelFailed = false;
+        this.failedUntil = 0L;
         this.failures = 0;
     }
 
-    /** 这条通道现在还能不能用（握手还没结果时也算"能用"，请求会先排队）。 */
+    /** 这条通道现在还能不能用（握手还没结果时也算"能用"，请求会先排队；失败则进入冷却）。 */
     public boolean isAvailable() {
-        return this.installed && !this.channelFailed;
+        return this.installed && System.currentTimeMillis() >= this.failedUntil;
     }
 
     /**
@@ -123,14 +125,21 @@ public final class ServuxTweaksChannel {
         if (this.servuxConfirmed) {
             this.pending.put(immutablePos, System.currentTimeMillis());
             this.send(ServuxTweaksPacket.blockEntityRequest(immutablePos));
-        } else if (this.handshakeSent) {
-            // 握手还在路上：先排队，收到 metadata 再发
-            this.waiting.add(immutablePos);
         } else {
-            return false;
+            // 还没握手（或上次失败已过冷却）：先补一次握手，请求排队，收到 metadata 再发
+            if (!this.handshakeSent) {
+                this.startHandshake();
+            }
+            this.waiting.add(immutablePos);
         }
 
         return true;
+    }
+
+    private void startHandshake() {
+        this.handshakeSent = true;
+        this.handshakeSentAt = System.currentTimeMillis();
+        this.send(ServuxTweaksPacket.metadataRequest(modVersion()));
     }
 
     /** 每个 tick 推进握手与请求的超时。 */
@@ -166,8 +175,12 @@ public final class ServuxTweaksChannel {
         }
     }
 
+    /** 这条通道这次不行了：清空在途请求并进入冷却，冷却过后会重新握手再试。 */
     private void failChannel() {
-        this.channelFailed = true;
+        this.failedUntil = System.currentTimeMillis() + RETRY_COOLDOWN_MS;
+        this.handshakeSent = false;
+        this.servuxConfirmed = false;
+        this.failures = 0;
         this.pending.clear();
 
         Set<BlockPos> queued = Set.copyOf(this.waiting);
