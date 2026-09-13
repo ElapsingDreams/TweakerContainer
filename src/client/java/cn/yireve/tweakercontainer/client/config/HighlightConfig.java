@@ -51,7 +51,7 @@ public class HighlightConfig implements IConfigHandler {
     public static class Generic {
         public static final ConfigBoolean ENABLED = new ConfigBoolean("enabled", false)
                 .apply(GENERIC_TRANSLATION_PREFIX);
-        public static final ConfigString TRIGGER_ITEM = new ConfigString("triggerItem", "minecraft:shulker_box")
+        public static final ConfigString TRIGGER_ITEM = new ConfigString("triggerItem", "minecraft:shulker_shell")
                 .apply(GENERIC_TRANSLATION_PREFIX);
         public static final ConfigBoolean SEE_THROUGH = new ConfigBoolean("seeThrough", false)
                 .apply(GENERIC_TRANSLATION_PREFIX);
