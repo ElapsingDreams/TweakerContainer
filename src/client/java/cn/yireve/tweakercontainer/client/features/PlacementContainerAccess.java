@@ -50,15 +50,48 @@ public final class PlacementContainerAccess {
     }
 
     private static Optional<SimpleInventory> getSchematicInventoryInternal(BlockPos worldPos, BlockState worldState) {
+        LocalPlacementPos placementPos = matchSchematicContainer(worldPos, worldState);
+        return placementPos == null ? Optional.empty() : Optional.ofNullable(getItems(placementPos));
+    }
+
+    /**
+     * 蓝图这一格（大箱子时算上另一半）是不是和世界方块配套的容器。
+     * <p>
+     * 与 {@link #getSchematicInventory} 的区别：这里不看容器里有没有东西，
+     * 只看“蓝图这格本来就是个同样的容器”，用来判定投影区里的箱子。
+     */
+    public static boolean isSchematicContainer(BlockPos worldPos, BlockState worldState) {
+        if (matchSchematicContainer(worldPos, worldState) != null) {
+            return true;
+        }
+        if (getChestType(worldState) == ChestType.SINGLE) {
+            return false;
+        }
+
+        World world = MinecraftClient.getInstance().world;
+        if (world == null) {
+            return false;
+        }
+        BlockPos adjacentChest = worldPos.add(ChestBlock.getFacing(worldState).getVector());
+        return matchSchematicContainer(adjacentChest, world.getBlockState(adjacentChest)) != null;
+    }
+
+    /**
+     * 世界方块与蓝图同一格上的容器配套时返回蓝图坐标，否则返回 null。
+     */
+    @Nullable
+    private static LocalPlacementPos matchSchematicContainer(BlockPos worldPos, BlockState worldState) {
         Optional<Inventory> dummyInv = ContainerUtils.validateContainer(worldPos, worldState);
         // World block is not a container
-        if (dummyInv.isEmpty())
-            return Optional.empty();
+        if (dummyInv.isEmpty()) {
+            return null;
+        }
 
         Optional<LocalPlacementPos> optionalPos = LocalPlacementPos.get(worldPos);
         // Block is not in the schematic
-        if (optionalPos.isEmpty())
-            return Optional.empty();
+        if (optionalPos.isEmpty()) {
+            return null;
+        }
 
         LocalPlacementPos placementPos = optionalPos.get();
         Optional<Inventory> schemInv = ContainerUtils.validateContainer(worldPos, placementPos.blockState());
@@ -69,10 +102,10 @@ public final class PlacementContainerAccess {
                 || !(dummyInv.get() instanceof BlockEntity dummyBE)
                 || schemBE.getType() != dummyBE.getType()
         ) {
-            return Optional.empty();
+            return null;
         }
 
-        return Optional.ofNullable(getItems(placementPos));
+        return placementPos;
     }
 
     private static SimpleInventory merge(Inventory first, Inventory second) {

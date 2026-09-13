@@ -2,7 +2,6 @@ package cn.yireve.tweakercontainer.client.features;
 
 import cn.yireve.tweakercontainer.client.HighlightState;
 import cn.yireve.tweakercontainer.client.utils.ContainerUtils;
-import cn.yireve.tweakercontainer.client.utils.LocalPlacementPos;
 import fi.dy.masa.malilib.util.WorldUtils;
 import net.minecraft.block.BlockState;
 import net.minecraft.client.MinecraftClient;
@@ -68,12 +67,10 @@ public class InventoryOverlay {
         BlockState state = world.getBlockState(pos);
         HighlightState highlightState = HighlightState.get();
 
-        // 检查是否是投影中的容器
-        if (LocalPlacementPos.get(pos).isPresent()) {
-            // 是投影容器则登记为投影来源，读取不到内容时退化为仓储容器
-            if (!highlightState.setCurrentProjectionContainer(pos)) {
-                highlightState.addStorageContainer(pos, state);
-            }
+        // 蓝图里同样是容器的位置（也就是投影区的箱子）只可能是投影来源，绝不能登记成材料容器，
+        // 否则投影上会冒出蓝框、取消时也会提示成清了材料。蓝图内容读不出来（比如空箱子）就不登记
+        if (PlacementContainerAccess.isSchematicContainer(pos, state)) {
+            highlightState.setCurrentProjectionContainer(pos);
         } else {
             // 不是投影容器，作为仓储容器处理；重复打开只会刷新
             highlightState.addStorageContainer(pos, state);

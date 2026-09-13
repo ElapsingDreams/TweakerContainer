@@ -385,10 +385,16 @@ public final class HighlightState {
         World world = MinecraftClient.getInstance().world;
         BlockState state = world != null ? world.getBlockState(immutablePos) : null;
 
-        // 投影容器只缓存内容（用于扣减需求），不登记为仓储容器，
-        // 否则手持触发物品时会在投影容器位置多画一个蓝框。大箱子的两半都算投影容器
+        // 投影来源（大箱子两半都算）只缓存内容用于扣减需求，不登记为仓储容器，
+        // 否则手持触发物品时会在投影容器位置多画一个蓝框
         if (isProjectionContainer(immutablePos)) {
             cacheProjectionContents(inv);
+            return;
+        }
+
+        // 投影区里其它的箱子（蓝图里同样是容器，但不是当前投影来源）：既不算材料容器，
+        // 也不能把它的内容记到投影来源那一格上，直接不管
+        if (state != null && PlacementContainerAccess.isSchematicContainer(immutablePos, state)) {
             return;
         }
 
