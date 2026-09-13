@@ -1,0 +1,15 @@
+{
+  "required": true,
+  "package": "cn.yireve.tweakercontainer.client.mixins",
+  "compatibilityLevel": "JAVA_17",
+  "mixins": [
+    "ClientPlayerInteractionManagerMixin",
+    "mod.litematica.LitematicaSchematicAccessor"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  },
+  "client": [
+    "HandledScreenMixin"
+  ]
+}
