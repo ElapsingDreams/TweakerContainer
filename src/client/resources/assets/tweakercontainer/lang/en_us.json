@@ -18,7 +18,7 @@
   "tweakercontainer.config.generic.name.containerRefreshInterval": "Container Refresh Interval",
   "tweakercontainer.config.generic.comment.containerRefreshInterval": "How often (in ticks) the contents of nearby marked containers are fetched again, so changes made by other players show up. 20 ticks = 1 second, 0 disables the refresh",
   "tweakercontainer.config.generic.name.containerRefreshBatchSize": "Refresh Batch Size",
-  "tweakercontainer.config.generic.comment.containerRefreshBatchSize": "How many containers are polled per refresh round (they rotate, not all at once). The upper limit is the Servux channel's in-flight request limit; raise the interval instead if the server complains",
+  "tweakercontainer.config.generic.comment.containerRefreshBatchSize": "How many containers are polled per refresh round (they rotate, not all at once). Reading the built-in server in single player / on a LAN host is cheap so a larger value is fine; on a server the ceiling is the Servux channel's in-flight limit of 32",
   "tweakercontainer.config.generic.name.strictNbt": "Strict NBT",
   "tweakercontainer.config.generic.comment.strictNbt": "Items with different components do not count as available and cannot substitute for each other",
   "tweakercontainer.config.generic.name.nbtMismatchColor": "NBT Mismatch Color",

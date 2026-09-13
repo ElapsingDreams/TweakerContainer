@@ -18,7 +18,7 @@
   "tweakercontainer.config.generic.name.containerRefreshInterval": "容器内容重取间隔",
   "tweakercontainer.config.generic.comment.containerRefreshInterval": "已标记容器每隔多少 tick 重新取一次内容，用来跟上别的玩家改动。20 tick = 1 秒，0 表示不自动重取",
   "tweakercontainer.config.generic.name.containerRefreshBatchSize": "一轮重取几个容器",
-  "tweakercontainer.config.generic.comment.containerRefreshBatchSize": "每轮重取按这个数量轮询（不是一次全刷）。上限就是 Servux 通道的同时在飞请求数；服务端吃不消时优先把间隔调大",
+  "tweakercontainer.config.generic.comment.containerRefreshBatchSize": "每轮重取按这个数量轮询（不是一次全刷）。单人/局域网主机的内置直读很便宜，可以调大；联机时上限受 Servux 通道同时在飞的请求数（32）约束",
   "tweakercontainer.config.generic.name.strictNbt": "严格校验 NBT",
   "tweakercontainer.config.generic.comment.strictNbt": "严格校验 NBT：物品组件不一致时不计入缺失，也不互相顶替数量",
   "tweakercontainer.config.generic.name.nbtMismatchColor": "NBT 不同改色",

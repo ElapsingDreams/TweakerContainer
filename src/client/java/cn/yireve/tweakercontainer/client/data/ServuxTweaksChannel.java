@@ -1,5 +1,6 @@
 package cn.yireve.tweakercontainer.client.data;
 
+import com.mojang.logging.LogUtils;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
@@ -10,6 +11,7 @@ import net.minecraft.network.codec.PacketCodec;
 import net.minecraft.network.packet.CustomPayload;
 import net.minecraft.util.Identifier;
 import net.minecraft.util.math.BlockPos;
+import org.slf4j.Logger;
 
 import java.util.Map;
 import java.util.Set;
@@ -28,6 +30,8 @@ import java.util.concurrent.ConcurrentHashMap;
  * 同一通道可能已被别的模组（tweakeroo）注册，注册撞车时不抢，直接让这条通道失效。
  */
 public final class ServuxTweaksChannel {
+    private static final Logger LOGGER = LogUtils.getLogger();
+
     public static final Identifier CHANNEL_ID = Identifier.of("servux", "tweaks");
 
     /** 握手与单次请求的等待上限（毫秒）。 */
@@ -78,6 +82,7 @@ public final class ServuxTweaksChannel {
         } catch (Throwable t) {
             // 通道已被别的模组注册（例如 tweakeroo 在跑），不跟它抢：这条通道直接判死
             this.installed = false;
+            LOGGER.warn("servux:tweaks 通道注册失败（多半是别的模组已占用），联机数据改用原版查询或开界面抓取", t);
         }
     }
 
@@ -177,6 +182,8 @@ public final class ServuxTweaksChannel {
 
     /** 这条通道这次不行了：清空在途请求并进入冷却，冷却过后会重新握手再试。 */
     private void failChannel() {
+        boolean handshakeFailed = !this.servuxConfirmed;
+
         this.failedUntil = System.currentTimeMillis() + RETRY_COOLDOWN_MS;
         this.handshakeSent = false;
         this.servuxConfirmed = false;
@@ -185,6 +192,12 @@ public final class ServuxTweaksChannel {
 
         Set<BlockPos> queued = Set.copyOf(this.waiting);
         this.waiting.clear();
+
+        LOGGER.warn(handshakeFailed
+                        ? "Servux 握手没回应（服务端没装 Servux，或 tweaks_data 权限不放行），{} 秒后重试；期间联机数据退原版查询/开界面"
+                        : "Servux 连续 {} 次请求没回包，{} 秒后重新握手；期间联机数据退原版查询/开界面",
+                handshakeFailed ? RETRY_COOLDOWN_MS / 1000 : MAX_FAILURES, RETRY_COOLDOWN_MS / 1000);
+
         ContainerDataManager.get().onServuxUnavailable(queued);
     }
 

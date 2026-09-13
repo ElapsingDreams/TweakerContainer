@@ -273,6 +273,7 @@ public final class HighlightState {
     public void updateMatching() {
         dirty = false;
         validateStorageContainers();
+        pairRegisteredChests();
         matchingStorageContainers.clear();
         remainingNeeded.clear();
         projectionMissing.clear();
@@ -466,6 +467,37 @@ public final class HighlightState {
             result.setStack(i, source.getStack(from + i).copy());
         }
         return result;
+    }
+
+    /**
+     * 把"两格都登记了、却没配上对"的大箱子补上配对。
+     * <p>
+     * 正常路径（{@link #acceptStorageContents}）拿到两半内容时就会配对，但两半可能来自不同来源或先后顺序
+     * 不凑巧（比如另一半那次请求失败后靠别的路径登记上来），漏配就会画成两个小框。这里每次重算前扫一遍兜底。
+     */
+    public void pairRegisteredChests() {
+        World world = MinecraftClient.getInstance().world;
+        if (world == null || storageContainers.isEmpty()) {
+            return;
+        }
+
+        boolean changed = false;
+        for (BlockPos pos : storageContainers) {
+            if (storageContainerPartners.containsKey(pos)) {
+                continue;
+            }
+
+            BlockPos partner = findChestPartner(world, pos, world.getBlockState(pos));
+            if (partner != null && storageContainers.contains(partner)) {
+                storageContainerPartners.put(pos, partner);
+                storageContainerPartners.put(partner, pos);
+                changed = true;
+            }
+        }
+
+        if (changed) {
+            markDirty();
+        }
     }
 
     public boolean isStorageContainer(BlockPos pos) {
