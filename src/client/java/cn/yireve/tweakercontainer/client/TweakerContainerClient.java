@@ -1,6 +1,7 @@
 package cn.yireve.tweakercontainer.client;
 
 import cn.yireve.tweakercontainer.client.config.HighlightConfig;
+import cn.yireve.tweakercontainer.client.data.ContainerDataManager;
 import cn.yireve.tweakercontainer.client.gui.GuiConfigs;
 import cn.yireve.tweakercontainer.client.handler.InteractionHandler;
 import fi.dy.masa.malilib.config.ConfigManager;
@@ -43,6 +44,7 @@ public class TweakerContainerClient implements ClientModInitializer {
 
         BlockHighlighterRender.setup();
         InteractionHandler.setup();
+        ContainerDataManager.setup();
 
         setupHotkeys();
     }

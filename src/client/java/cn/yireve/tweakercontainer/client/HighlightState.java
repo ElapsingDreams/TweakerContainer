@@ -1,6 +1,7 @@
 package cn.yireve.tweakercontainer.client;
 
 import cn.yireve.tweakercontainer.client.config.HighlightConfig;
+import cn.yireve.tweakercontainer.client.data.ContainerDataManager;
 import cn.yireve.tweakercontainer.client.features.PlacementContainerAccess;
 import fi.dy.masa.malilib.util.InventoryUtils;
 import fi.dy.masa.malilib.util.ItemType;
@@ -483,6 +484,36 @@ public final class HighlightState {
         if (storageContainers.add(immutablePos)) {
             markDirty();
         }
+
+        // 登记后立刻按配置的数据源取一次内容：本地世界直读内置服务端，联机走服务端查询，
+        // 两条都拿不到就退回开界面抓取那条老链路
+        ContainerDataManager.get().ensureContents(immutablePos, state);
+    }
+
+    /** 这一格的容器内容是否已经有缓存（不管来自哪条数据源）。 */
+    public boolean hasContents(BlockPos pos) {
+        return pos != null && storageContainerCache.containsKey(pos.toImmutable());
+    }
+
+    /**
+     * 数据源直接读到的某一格容器内容：写进缓存并登记。
+     * <p>
+     * 大箱子两半是各自的方块实体、各读各的，两半都拿到以后在这里配上对，让它们合成一个整箱框。
+     */
+    public void acceptStorageContents(BlockPos pos, BlockState state, Inventory inv) {
+        if (pos == null || inv == null) {
+            return;
+        }
+
+        BlockPos immutablePos = pos.toImmutable();
+        putStorageContainer(immutablePos, inv, state);
+
+        BlockPos partner = findChestPartner(MinecraftClient.getInstance().world, immutablePos, state);
+        if (partner != null && storageContainerCache.containsKey(partner)) {
+            storageContainerPartners.put(immutablePos, partner);
+            storageContainerPartners.put(partner, immutablePos);
+            markDirty();
+        }
     }
 
     /** 大箱子的另一半；不是大箱子或另一半已失效时返回 null。 */
@@ -697,5 +728,6 @@ public final class HighlightState {
         currentProjectionContainer = null;
         tempProcessingPos = null;
         dirty = false;
+        ContainerDataManager.get().reset();
     }
 }

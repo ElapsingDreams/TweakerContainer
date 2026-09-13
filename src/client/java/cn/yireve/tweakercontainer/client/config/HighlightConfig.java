@@ -11,7 +11,9 @@ import fi.dy.masa.malilib.config.options.ConfigColor;
 import fi.dy.masa.malilib.config.options.ConfigDouble;
 import fi.dy.masa.malilib.config.options.ConfigHotkey;
 import fi.dy.masa.malilib.config.options.ConfigInteger;
+import fi.dy.masa.malilib.config.options.ConfigOptionList;
 import fi.dy.masa.malilib.config.options.ConfigString;
+import cn.yireve.tweakercontainer.client.data.ContainerSource;
 import fi.dy.masa.malilib.util.FileUtils;
 import fi.dy.masa.malilib.util.JsonUtils;
 import fi.dy.masa.malilib.util.data.Color4f;
@@ -77,11 +79,14 @@ public class HighlightConfig implements IConfigHandler {
                 .apply(GENERIC_TRANSLATION_PREFIX);
         public static final ConfigHotkey OPEN_CONFIG_GUI = new ConfigHotkey("openConfigGui", "X,C")
                 .apply(GENERIC_TRANSLATION_PREFIX);
+        public static final ConfigOptionList CONTAINER_SOURCE = new ConfigOptionList("containerSource", ContainerSource.AUTO)
+                .apply(GENERIC_TRANSLATION_PREFIX);
 
         public static final List<IConfigBase> OPTIONS = List.of(
                 ENABLED,
                 TRIGGER_ITEM,
                 SEE_THROUGH,
+                CONTAINER_SOURCE,
                 STRICT_NBT,
                 NBT_MISMATCH_COLOR,
                 READ_NESTED_CONTAINERS,
@@ -141,6 +146,13 @@ public class HighlightConfig implements IConfigHandler {
 
     public static boolean isSeeThrough() {
         return Generic.SEE_THROUGH.getBooleanValue();
+    }
+
+    /** 容器内容的数据源；具体走哪条由 {@code ContainerDataManager} 结合实际环境解析。 */
+    public static ContainerSource getContainerSource() {
+        return Generic.CONTAINER_SOURCE.getOptionListValue() instanceof ContainerSource source
+                ? source
+                : ContainerSource.AUTO;
     }
 
     public static boolean isStrictNbt() {
