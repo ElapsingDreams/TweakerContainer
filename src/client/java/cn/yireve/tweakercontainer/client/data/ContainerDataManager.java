@@ -85,9 +85,10 @@ public final class ContainerDataManager {
 
         switch (this.effectiveSource()) {
             case INTEGRATED -> {
-                if (!this.readIntegrated(immutablePos, state)) {
-                    pending.remove(immutablePos);
-                }
+                // 本地读是同步的，读完就撤掉"在查"标记：内容有没有由缓存自己说了算。
+                // 否则清掉标记再重新登记时会被这个残留标记挡住，永远不再取内容
+                this.readIntegrated(immutablePos, state);
+                pending.remove(immutablePos);
             }
             case SERVUX -> {
                 if (!this.requestFromServer(immutablePos)) {
