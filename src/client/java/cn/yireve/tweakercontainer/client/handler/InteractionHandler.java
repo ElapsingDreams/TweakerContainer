@@ -48,10 +48,10 @@ public final class InteractionHandler {
                 return ActionResult.SUCCESS;
             }
 
-            // 材料容器：必须登记着、而且此刻确实画得出蓝框（方块还是原来那个容器）才清，
-            // 这样提示和框永远对得上——没蓝框的箱子不会响应也不会提示
+            // 材料容器：必须登记着、而且此刻确实画得出蓝框（方块还是原来那个容器）才清。
+            // 大箱子按整箱清，点哪一半都清整箱
             if (state.isStorageContainer(pos) && state.isStorageContainerPresent(pos, world)
-                    && state.removeStorageContainer(pos)) {
+                    && state.removeWholeStorageContainer(pos)) {
                 player.sendMessage(Text.translatable("tweakercontainer.message.removed_storage",
                         pos.getX(), pos.getY(), pos.getZ()), true);
                 return ActionResult.SUCCESS;

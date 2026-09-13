@@ -550,6 +550,33 @@ public final class HighlightState {
     }
 
     /**
+     * 手动清除材料标记：大箱子时连同另一半一起清掉，点哪一半都清整箱。
+     * <p>
+     * 与 {@link #removeStorageContainer} 的区别：那个只清一格，留给"被撬掉一半后只丢那一半"用。
+     *
+     * @return 是否真的清掉了东西（没登记过时返回 false）
+     */
+    public boolean removeWholeStorageContainer(BlockPos pos) {
+        if (pos == null) {
+            return false;
+        }
+
+        BlockPos immutablePos = pos.toImmutable();
+        BlockPos partner = getChestPartner(immutablePos);
+        if (partner == null) {
+            // 还没建立配对信息时，按方块朝向再找一次大箱子的另一半
+            World world = MinecraftClient.getInstance().world;
+            partner = findChestPartner(world, immutablePos, world != null ? world.getBlockState(immutablePos) : null);
+        }
+
+        boolean changed = removeStorageContainer(immutablePos);
+        if (partner != null) {
+            changed |= removeStorageContainer(partner);
+        }
+        return changed;
+    }
+
+    /**
      * 取消投影来源。
      *
      * @return 是否真的取消了投影（本来就没有投影时返回 false）
