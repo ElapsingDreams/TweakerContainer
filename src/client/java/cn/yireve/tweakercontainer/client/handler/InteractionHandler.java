@@ -59,11 +59,27 @@ public final class InteractionHandler {
         }
 
         // 右键容器：登记为投影/仓储容器并记录本次处理坐标
-        if (!player.isSneaking() && isEnabled() && InventoryOverlay.onContainerClick(hitResult)) {
-            state.setTempProcessingPos(hitResult.getBlockPos());
-            state.checkAndRemoveSatisfiedContainer(hitResult.getBlockPos());
-        }
+        handleContainerClick(player, hitResult);
 
         return ActionResult.PASS;
+    }
+
+    /**
+     * 登记容器的唯一入口。
+     * <p>
+     * {@link UseBlockCallback} 与 {@code ClientPlayerInteractionManagerMixin} 都会调到这里，
+     * 早先两处各写一套，结果潜行右键被其中一处当成登记，弹出了莫名其妙的清除提示。
+     *
+     * @return 是否登记成功
+     */
+    public static boolean handleContainerClick(PlayerEntity player, BlockHitResult hitResult) {
+        if (player == null || player.isSneaking() || !isEnabled() || !InventoryOverlay.onContainerClick(hitResult)) {
+            return false;
+        }
+
+        HighlightState state = HighlightState.get();
+        state.setTempProcessingPos(hitResult.getBlockPos());
+        state.checkAndRemoveSatisfiedContainer(hitResult.getBlockPos());
+        return true;
     }
 }

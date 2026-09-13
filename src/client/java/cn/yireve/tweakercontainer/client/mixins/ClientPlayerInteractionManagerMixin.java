@@ -1,5 +1,5 @@
 package cn.yireve.tweakercontainer.client.mixins;
-import cn.yireve.tweakercontainer.client.features.InventoryOverlay;
+import cn.yireve.tweakercontainer.client.handler.InteractionHandler;
 import net.minecraft.client.network.ClientPlayerEntity;
 import net.minecraft.client.network.ClientPlayerInteractionManager;
 import net.minecraft.util.ActionResult;
@@ -14,12 +14,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 public class ClientPlayerInteractionManagerMixin {
     @Inject(method = "interactBlock", at = @At(value = "RETURN", ordinal = 1))
     private void onContainerClick(ClientPlayerEntity player, Hand hand, BlockHitResult hitResult, CallbackInfoReturnable<ActionResult> cir) {
-        // 潜行右键是"清除标记"，绝不能顺手登记：一次右键会走主手、副手两遍 interactBlock，
-        // 这里登记下去，副手那遍就会把同一个箱子当成已登记的，弹一条清材料的提示
-        if (player.isSneaking()) {
-            return;
-        }
-
-        InventoryOverlay.onContainerClick(hitResult);
+        // 登记统一走 InteractionHandler 的入口（潜行判断也在里面），这里不再自己判断
+        InteractionHandler.handleContainerClick(player, hitResult);
     }
 }
