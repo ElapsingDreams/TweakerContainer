@@ -363,8 +363,7 @@ public abstract class HandledScreenMixin<T extends ScreenHandler> {
 
     @Unique
     private boolean isProjectionContainerOpen(HighlightState state) {
-        BlockPos projectionContainer = state.getCurrentProjectionContainer();
-        BlockPos currentContainer = InventoryOverlay.getCurrentContainerPos();
-        return projectionContainer != null && projectionContainer.equals(currentContainer);
+        // 大箱子的任意一半都算投影容器
+        return state.isProjectionContainer(InventoryOverlay.getCurrentContainerPos());
     }
 }

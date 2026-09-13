@@ -35,6 +35,21 @@ public class InventoryOverlay {
     }
 
     /**
+     * 该位置是不是能登记的容器：有方块实体、能读出背包、并且是个能开界面的容器。
+     * <p>
+     * 登记与右键清除都用这一个判断，免得两边对“什么算容器”的看法不一致。
+     */
+    public static boolean isContainer(World world, BlockPos pos) {
+        if (world == null || pos == null) {
+            return false;
+        }
+
+        BlockState state = world.getBlockState(pos);
+        Optional<Inventory> inventory = ContainerUtils.validateContainer(world, pos, state);
+        return inventory.isPresent() && inventory.get() instanceof ScreenHandlerFactory;
+    }
+
+    /**
      * @return 该方块是否已登记为投影容器或仓储容器
      */
     public static boolean onContainerClick(BlockHitResult hitResult) {
@@ -44,18 +59,13 @@ public class InventoryOverlay {
 
         BlockPos pos = hitResult.getBlockPos();
         World world = WorldUtils.getBestWorld(MinecraftClient.getInstance());
-        if (world == null) {
+
+        // 检查是否是有效的容器
+        if (!isContainer(world, pos)) {
             return false;
         }
 
         BlockState state = world.getBlockState(pos);
-        Optional<Inventory> inventory = ContainerUtils.validateContainer(world, pos, state);
-
-        // 检查是否是有效的容器
-        if (inventory.isEmpty() || !(inventory.get() instanceof ScreenHandlerFactory)) {
-            return false;
-        }
-
         HighlightState highlightState = HighlightState.get();
 
         // 检查是否是投影中的容器

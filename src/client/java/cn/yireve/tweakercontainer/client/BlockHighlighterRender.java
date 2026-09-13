@@ -86,7 +86,14 @@ public final class BlockHighlighterRender {
 
             BlockPos projectionContainer = state.getCurrentProjectionContainer();
             if (projectionContainer != null) {
-                renderOutline(cameraPos, projectionContainer, HighlightConfig.getProjectionContainerColor(), throughWalls);
+                Color4f projectionColor = HighlightConfig.getProjectionContainerColor();
+                BlockPos projectionPartner = state.getProjectionContainerPartner();
+                if (projectionPartner != null) {
+                    // 投影容器是大箱子时框整个箱子，两半之间共用的那条棱不画
+                    renderChestOutline(cameraPos, projectionContainer, projectionPartner, projectionColor, throughWalls);
+                } else {
+                    renderOutline(cameraPos, projectionContainer, projectionColor, throughWalls);
+                }
             }
         } else {
             Set<BlockPos> matching = state.getMatchingStorageContainers();

@@ -2,7 +2,9 @@ package cn.yireve.tweakercontainer.client.handler;
 
 import cn.yireve.tweakercontainer.client.HighlightState;
 import cn.yireve.tweakercontainer.client.features.InventoryOverlay;
+import fi.dy.masa.malilib.util.WorldUtils;
 import net.fabricmc.fabric.api.event.player.UseBlockCallback;
+import net.minecraft.client.MinecraftClient;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.text.Text;
 import net.minecraft.util.ActionResult;
@@ -36,15 +38,20 @@ public final class InteractionHandler {
         if (player.isSneaking() && hitResult.getType() == BlockHitResult.Type.BLOCK && isHoldingTriggerItem() && isEnabled()) {
             BlockPos pos = hitResult.getBlockPos();
 
-            if (state.isStorageContainer(pos)) {
-                state.removeStorageContainer(pos);
-                player.sendMessage(Text.translatable("tweakercontainer.message.removed_storage",
+            // 投影容器：大箱子的任意一半都算，取消即整个投影
+            if (state.isProjectionContainer(pos)) {
+                state.removeProjectContainer();
+                player.sendMessage(Text.translatable("tweakercontainer.message.removed_schem",
                         pos.getX(), pos.getY(), pos.getZ()), true);
                 return ActionResult.SUCCESS;
             }
-            if (pos.equals(state.getCurrentProjectionContainer())) {
-                state.removeProjectContainer();
-                player.sendMessage(Text.translatable("tweakercontainer.message.removed_schem",
+
+            // 仓储容器：不要求它还挂在名单上——登记可能已经被“材料够了”或方块复核撤掉，
+            // 玩家手动清除时照样要清一次并给反馈。只认容器，免得对着普通方块乱提示
+            World bestWorld = WorldUtils.getBestWorld(MinecraftClient.getInstance());
+            if (InventoryOverlay.isContainer(bestWorld != null ? bestWorld : world, pos)) {
+                state.removeStorageContainer(pos);
+                player.sendMessage(Text.translatable("tweakercontainer.message.removed_storage",
                         pos.getX(), pos.getY(), pos.getZ()), true);
                 return ActionResult.SUCCESS;
             }

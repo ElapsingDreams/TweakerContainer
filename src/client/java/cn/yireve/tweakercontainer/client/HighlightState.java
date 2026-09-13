@@ -140,6 +140,27 @@ public final class HighlightState {
         return currentProjectionContainer;
     }
 
+    /** 投影容器大箱子的另一半；不是大箱子、或对面不是箱子时返回 null。 */
+    public BlockPos getProjectionContainerPartner() {
+        BlockPos projection = currentProjectionContainer;
+        if (projection == null) {
+            return null;
+        }
+
+        World world = MinecraftClient.getInstance().world;
+        return world == null ? null : findChestPartner(world, projection, world.getBlockState(projection));
+    }
+
+    /** 该坐标是不是投影容器：大箱子的任意一半都算。 */
+    public boolean isProjectionContainer(BlockPos pos) {
+        if (pos == null || currentProjectionContainer == null) {
+            return false;
+        }
+
+        BlockPos immutablePos = pos.toImmutable();
+        return immutablePos.equals(currentProjectionContainer) || immutablePos.equals(getProjectionContainerPartner());
+    }
+
     // ---------- 槽位提示查询 ----------
 
     /**
@@ -267,9 +288,15 @@ public final class HighlightState {
             }
         }
 
-        // 2. 投影容器里已有的数量
+        // 2. 投影容器里已有的数量（大箱子的内容统一记在登记坐标下，登记坐标落在哪一半都能取到）
         Map<ItemType, Integer> containerCount = new HashMap<>();
         Inventory projectionInv = storageContainerCache.get(currentProjectionContainer);
+        if (projectionInv == null) {
+            BlockPos partner = getProjectionContainerPartner();
+            if (partner != null) {
+                projectionInv = storageContainerCache.get(partner);
+            }
+        }
         if (projectionInv != null) {
             for (int i = 0; i < projectionInv.size(); i++) {
                 merge(containerCount, projectionInv.getStack(i), MAX_NESTING_DEPTH);
@@ -359,9 +386,9 @@ public final class HighlightState {
         BlockState state = world != null ? world.getBlockState(immutablePos) : null;
 
         // 投影容器只缓存内容（用于扣减需求），不登记为仓储容器，
-        // 否则手持触发物品时会在投影容器位置多画一个蓝框
-        if (immutablePos.equals(currentProjectionContainer)) {
-            cacheContents(immutablePos, inv, state);
+        // 否则手持触发物品时会在投影容器位置多画一个蓝框。大箱子的两半都算投影容器
+        if (isProjectionContainer(immutablePos)) {
+            cacheProjectionContents(inv);
             return;
         }
 
@@ -374,10 +401,9 @@ public final class HighlightState {
 
                 putStorageContainer(immutablePos, copyRange(inv, selfFirst ? 0 : halfSize, halfSize), state);
 
-                BlockPos partner = immutablePos.add(ChestBlock.getFacing(state).getVector());
-                BlockState partnerState = world.getBlockState(partner);
-                if (partnerState.getBlock() instanceof ChestBlock) {
-                    putStorageContainer(partner, copyRange(inv, selfFirst ? halfSize : 0, halfSize), partnerState);
+                BlockPos partner = findChestPartner(world, immutablePos, state);
+                if (partner != null) {
+                    putStorageContainer(partner, copyRange(inv, selfFirst ? halfSize : 0, halfSize), world.getBlockState(partner));
                     storageContainerPartners.put(immutablePos, partner);
                     storageContainerPartners.put(partner, immutablePos);
                 }
@@ -388,18 +414,36 @@ public final class HighlightState {
         putStorageContainer(immutablePos, inv, state);
     }
 
-    /** 只写内容与方块状态，不登记为仓储容器。 */
-    private void cacheContents(BlockPos pos, Inventory inv, BlockState state) {
+    /**
+     * 投影容器的内容统一记在登记坐标下：大箱子开哪一半都只存一份，统计时也不会算两遍。
+     */
+    private void cacheProjectionContents(Inventory inv) {
+        BlockPos canonical = currentProjectionContainer;
+        if (canonical != null && storageContainerCache.put(canonical, inv) != inv) {
+            markDirty();
+        }
+    }
+
+    /** 大箱子的另一半；不是大箱子、或对面不是箱子时返回 null。 */
+    private static BlockPos findChestPartner(World world, BlockPos pos, BlockState state) {
+        if (world == null || state == null || !(state.getBlock() instanceof ChestBlock)) {
+            return null;
+        }
+        if (state.get(ChestBlock.CHEST_TYPE) == ChestType.SINGLE) {
+            return null;
+        }
+
+        BlockPos partner = pos.add(ChestBlock.getFacing(state).getVector());
+        return world.getBlockState(partner).getBlock() instanceof ChestBlock ? partner : null;
+    }
+
+    private void putStorageContainer(BlockPos pos, Inventory inv, BlockState state) {
         if (storageContainerCache.put(pos, inv) != inv) {
             markDirty();
         }
         if (state != null) {
             storageContainerStates.put(pos, state);
         }
-    }
-
-    private void putStorageContainer(BlockPos pos, Inventory inv, BlockState state) {
-        cacheContents(pos, inv, state);
 
         // 注意不能写成 `put(...) != inv || storageContainers.add(pos)`：
         // 左边为真时 || 会短路，导致登记这一句根本不执行
