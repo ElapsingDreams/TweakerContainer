@@ -14,6 +14,7 @@ import fi.dy.masa.malilib.config.options.ConfigInteger;
 import fi.dy.masa.malilib.config.options.ConfigOptionList;
 import fi.dy.masa.malilib.config.options.ConfigString;
 import cn.yireve.tweakercontainer.client.data.ContainerSource;
+import cn.yireve.tweakercontainer.client.data.ServuxTweaksChannel;
 import fi.dy.masa.malilib.util.FileUtils;
 import fi.dy.masa.malilib.util.JsonUtils;
 import fi.dy.masa.malilib.util.data.Color4f;
@@ -83,6 +84,9 @@ public class HighlightConfig implements IConfigHandler {
                 .apply(GENERIC_TRANSLATION_PREFIX);
         public static final ConfigInteger CONTAINER_REFRESH_INTERVAL = new ConfigInteger("containerRefreshInterval", 20, 0, 1200)
                 .apply(GENERIC_TRANSLATION_PREFIX);
+        public static final ConfigInteger CONTAINER_REFRESH_BATCH_SIZE =
+                new ConfigInteger("containerRefreshBatchSize", 4, 1, ServuxTweaksChannel.MAX_PENDING_REQUESTS)
+                        .apply(GENERIC_TRANSLATION_PREFIX);
 
         public static final List<IConfigBase> OPTIONS = List.of(
                 ENABLED,
@@ -90,6 +94,7 @@ public class HighlightConfig implements IConfigHandler {
                 SEE_THROUGH,
                 CONTAINER_SOURCE,
                 CONTAINER_REFRESH_INTERVAL,
+                CONTAINER_REFRESH_BATCH_SIZE,
                 STRICT_NBT,
                 NBT_MISMATCH_COLOR,
                 READ_NESTED_CONTAINERS,
@@ -154,6 +159,11 @@ public class HighlightConfig implements IConfigHandler {
     /** 容器内容的重取间隔（tick），0 = 关掉自动重取。 */
     public static int getContainerRefreshInterval() {
         return Generic.CONTAINER_REFRESH_INTERVAL.getIntegerValue();
+    }
+
+    /** 一轮重取处理几个容器（轮询，不是一次全刷）。 */
+    public static int getContainerRefreshBatchSize() {
+        return Generic.CONTAINER_REFRESH_BATCH_SIZE.getIntegerValue();
     }
 
     /** 容器内容的数据源；具体走哪条由 {@code ContainerDataManager} 结合实际环境解析。 */

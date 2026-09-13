@@ -34,8 +34,8 @@ public final class ServuxTweaksChannel {
     private static final long TIMEOUT_MS = 2000L;
     /** 连续多少次请求没回包就判定这条通道不可用。 */
     private static final int MAX_FAILURES = 3;
-    /** 同时在飞的请求上限，避免对着服务端刷包。 */
-    private static final int MAX_PENDING = 32;
+    /** 同时在飞的请求上限，避免对着服务端刷包；其它模块也按这个值给自己的轮询定量。 */
+    public static final int MAX_PENDING_REQUESTS = 32;
     /** 这条通道失败后的冷却时间，过后重新握手再试（不然一次抖动就废掉整个会话）。 */
     private static final long RETRY_COOLDOWN_MS = 30_000L;
 
@@ -116,7 +116,7 @@ public final class ServuxTweaksChannel {
      * @return 请求是否已经接下（false 表示这条通道用不了，调用方该退回别的数据源）
      */
     public boolean requestBlockEntity(BlockPos pos) {
-        if (!this.isAvailable() || this.pending.size() + this.waiting.size() >= MAX_PENDING) {
+        if (!this.isAvailable() || this.pending.size() + this.waiting.size() >= MAX_PENDING_REQUESTS) {
             return false;
         }
 

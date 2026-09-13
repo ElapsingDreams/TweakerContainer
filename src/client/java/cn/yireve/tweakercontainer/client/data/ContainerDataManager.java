@@ -27,7 +27,10 @@ import net.minecraft.world.chunk.WorldChunk;
 import org.slf4j.Logger;
 
 import java.util.ArrayDeque;
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.Deque;
+import java.util.List;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -55,8 +58,8 @@ public final class ContainerDataManager {
     private static final long QUERY_TIMEOUT_MS = 2000L;
     /** 连续多少次查询没回包就认定这个服务器不支持查询 */
     private static final int QUERY_FAILURE_LIMIT = 3;
-    /** 一轮定时重取最多处理几个容器，免得对着服务端刷包 */
-    private static final int REFRESH_PER_CYCLE = 8;
+    /** 一轮定时重取最多处理几个容器（可配），实际还受 Servux 通道在飞上限约束 */
+    private int refreshCursor;
     /** 只重取玩家这么多格以内的容器 */
     private static final double REFRESH_RANGE_SQ = 64.0D * 64.0D;
 
@@ -126,15 +129,10 @@ public final class ContainerDataManager {
         }
     }
 
-    /** 按配置的间隔重取玩家附近的容器。 */
+    /** 按配置的间隔、小批量轮询玩家附近的容器。 */
     private void tickRefresh() {
         int interval = HighlightConfig.getContainerRefreshInterval();
         if (interval <= 0 || !HighlightConfig.isEnabled() || ++this.refreshTicks < interval) {
-            return;
-        }
-
-        // 上一轮还没消化完就先不动，免得把通道刷爆、把新登记挤出去
-        if (!this.pending.isEmpty()) {
             return;
         }
 
@@ -147,14 +145,30 @@ public final class ContainerDataManager {
             return;
         }
 
-        Vec3d playerPos = player.getPos();
-        int budget = REFRESH_PER_CYCLE;
+        // 在飞请求上限由 Servux 通道决定：只补还能塞进去的那几个，一轮不全刷
+        int room = ServuxTweaksChannel.MAX_PENDING_REQUESTS - this.pending.size();
+        int batch = Math.min(HighlightConfig.getContainerRefreshBatchSize(), room);
+        if (batch <= 0) {
+            return;
+        }
 
-        for (BlockPos pos : HighlightState.get().getStorageContainers()) {
-            if (budget <= 0) {
-                break;
-            }
-            if (this.pending.contains(pos) || playerPos.squaredDistanceTo(Vec3d.ofCenter(pos)) > REFRESH_RANGE_SQ) {
+        List<BlockPos> nearby = nearbyContainers(player);
+        if (nearby.isEmpty()) {
+            this.refreshCursor = 0;
+            return;
+        }
+        if (this.refreshCursor >= nearby.size()) {
+            this.refreshCursor = 0;
+        }
+
+        for (int i = 0; i < nearby.size() && batch > 0; i++) {
+            int index = (this.refreshCursor + i) % nearby.size();
+            BlockPos pos = nearby.get(index);
+
+            // 游标停在下一个待处理的位置上，下一轮从这里接着轮询
+            this.refreshCursor = (index + 1) % nearby.size();
+
+            if (this.pending.contains(pos)) {
                 continue;
             }
 
@@ -162,8 +176,23 @@ public final class ContainerDataManager {
             this.refreshContents(pos, state);
             // 上一轮没配上对的大箱子（另一半那次请求失败）在这里补上，否则会一直只画一半
             this.ensureChestPartner(pos, state);
-            budget--;
+            batch--;
         }
+    }
+
+    /** 玩家附近已登记的容器，按坐标排序让轮询顺序稳定。 */
+    private static List<BlockPos> nearbyContainers(PlayerEntity player) {
+        Vec3d playerPos = player.getPos();
+        List<BlockPos> result = new ArrayList<>();
+
+        for (BlockPos pos : HighlightState.get().getStorageContainers()) {
+            if (playerPos.squaredDistanceTo(Vec3d.ofCenter(pos)) <= REFRESH_RANGE_SQ) {
+                result.add(pos);
+            }
+        }
+
+        result.sort(Comparator.comparingLong(BlockPos::asLong));
+        return result;
     }
 
     /** 当前真正生效的数据源（配置 + 实际环境解析后的结果）。 */
