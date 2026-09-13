@@ -32,21 +32,21 @@ public final class InteractionHandler {
 
         HighlightState state = HighlightState.get();
 
-        // 潜行右键清除标记：只清当前位置真的标着的东西，没标的地方不响应也不提示
+        // 潜行右键清除标记：只清当前位置真的画着框的东西，没框的地方不响应也不提示
         if (player.isSneaking() && hitResult.getType() == BlockHitResult.Type.BLOCK && isHoldingTriggerItem() && isEnabled()) {
             BlockPos pos = hitResult.getBlockPos();
 
             // 投影来源：大箱子的另一半也算，取消即整个投影
-            if (state.isProjectionContainer(pos)) {
-                state.removeProjectContainer();
+            if (state.isProjectionContainer(pos) && state.removeProjectContainer()) {
                 player.sendMessage(Text.translatable("tweakercontainer.message.removed_schem",
                         pos.getX(), pos.getY(), pos.getZ()), true);
                 return ActionResult.SUCCESS;
             }
 
-            // 材料容器：只认登记着的（也就是画着蓝框的）；没蓝框的箱子不响应也不提示
-            if (state.isStorageContainer(pos)) {
-                state.removeStorageContainer(pos);
+            // 材料容器：必须登记着、而且此刻确实画得出蓝框（方块还是原来那个容器）才清，
+            // 这样提示和框永远对得上——没蓝框的箱子不会响应也不会提示
+            if (state.isStorageContainer(pos) && state.isStorageContainerPresent(pos, world)
+                    && state.removeStorageContainer(pos)) {
                 player.sendMessage(Text.translatable("tweakercontainer.message.removed_storage",
                         pos.getX(), pos.getY(), pos.getZ()), true);
                 return ActionResult.SUCCESS;

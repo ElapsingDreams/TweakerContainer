@@ -522,9 +522,14 @@ public final class HighlightState {
         }
     }
 
-    public void removeStorageContainer(BlockPos pos) {
+    /**
+     * 取消仓储登记。
+     *
+     * @return 是否真的清掉了东西（没登记过时返回 false）
+     */
+    public boolean removeStorageContainer(BlockPos pos) {
         if (pos == null) {
-            return;
+            return false;
         }
 
         BlockPos immutablePos = pos.toImmutable();
@@ -541,24 +546,33 @@ public final class HighlightState {
         if (changed) {
             markDirty();
         }
+        return changed;
     }
 
-    public void removeProjectContainer() {
+    /**
+     * 取消投影来源。
+     *
+     * @return 是否真的取消了投影（本来就没有投影时返回 false）
+     */
+    public boolean removeProjectContainer() {
+        if (currentProjectionContainer == null) {
+            return false;
+        }
+
         // 投影区的箱子不能同时是材料容器：取消投影时顺手清掉同一格（大箱子两半都算）
         // 可能残留的材料标记，免得原地留下蓝框
-        if (currentProjectionContainer != null) {
-            removeStorageContainer(currentProjectionContainer);
+        removeStorageContainer(currentProjectionContainer);
 
-            BlockPos partner = getProjectionContainerPartner();
-            if (partner != null) {
-                removeStorageContainer(partner);
-            }
+        BlockPos partner = getProjectionContainerPartner();
+        if (partner != null) {
+            removeStorageContainer(partner);
         }
 
         currentProjectionContainer = null;
         currentMissingItems.clear();
         projectionMissing.clear();
         markDirty();
+        return true;
     }
 
     // ---------- 投影容器 ----------
