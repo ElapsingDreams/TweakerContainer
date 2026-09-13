@@ -4,8 +4,7 @@
   "package": "cn.yireve.tweakercontainer.client.mixins",
   "compatibilityLevel": "JAVA_21",
   "mixins": [
-    "ClientPlayerInteractionManagerMixin",
-    "mod.litematica.LitematicaSchematicAccessor"
+    "ClientPlayerInteractionManagerMixin"
   ],
   "injectors": {
     "defaultRequire": 1
