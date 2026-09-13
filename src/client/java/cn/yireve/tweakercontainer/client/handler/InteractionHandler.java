@@ -2,6 +2,7 @@ package cn.yireve.tweakercontainer.client.handler;
 
 import cn.yireve.tweakercontainer.client.HighlightState;
 import cn.yireve.tweakercontainer.client.features.InventoryOverlay;
+import cn.yireve.tweakercontainer.client.features.PlacementContainerAccess;
 import net.fabricmc.fabric.api.event.player.UseBlockCallback;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.text.Text;
@@ -36,8 +37,12 @@ public final class InteractionHandler {
         if (player.isSneaking() && hitResult.getType() == BlockHitResult.Type.BLOCK && isHoldingTriggerItem() && isEnabled()) {
             BlockPos pos = hitResult.getBlockPos();
 
-            // 投影来源：大箱子的另一半也算，取消即整个投影
-            if (state.isProjectionContainer(pos) && state.removeProjectContainer()) {
+            // 投影来源（大箱子的另一半也算），以及投影里同样有容器的位置：取消整个投影。
+            // 没有登记着投影时这一支不成立，也就不会有任何提示
+            boolean projectionSide = state.isProjectionContainer(pos)
+                    || (state.getCurrentProjectionContainer() != null
+                        && PlacementContainerAccess.isSchematicContainer(pos, world.getBlockState(pos)));
+            if (projectionSide && state.removeProjectContainer()) {
                 player.sendMessage(Text.translatable("tweakercontainer.message.removed_schem",
                         pos.getX(), pos.getY(), pos.getZ()), true);
                 return ActionResult.SUCCESS;
