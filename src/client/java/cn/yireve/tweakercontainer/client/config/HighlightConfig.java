@@ -33,6 +33,10 @@ import java.util.List;
 public class HighlightConfig implements IConfigHandler {
     public static final String MOD_ID = "tweakercontainer";
     private static final String CONFIG_FILE_NAME = MOD_ID + ".json";
+    // malilib 的 apply(前缀) 会自己往中间补一个点（前缀 + ".name." + 配置名），
+    // 所以前缀不能带结尾的点，否则拼出来是 generic..name.enabled 这种找不到的键
+    private static final String GENERIC_TRANSLATION_PREFIX = MOD_ID + ".config.generic";
+    private static final String COLORS_TRANSLATION_PREFIX = MOD_ID + ".config.colors";
     private static final String GENERIC_KEY = "generic";
     private static final String COLORS_KEY = "colors";
     private static final Logger LOGGER = LogUtils.getLogger();
@@ -45,34 +49,34 @@ public class HighlightConfig implements IConfigHandler {
     private static volatile String cachedTriggerItemId = "";
 
     public static class Generic {
-        public static final ConfigBoolean ENABLED = new ConfigBoolean("enabled", false,
-                "自动高亮总开关");
-        public static final ConfigString TRIGGER_ITEM = new ConfigString("triggerItem", "minecraft:shulker_box",
-                "手持该物品时显示线框，填写物品 ID");
-        public static final ConfigBoolean SEE_THROUGH = new ConfigBoolean("seeThrough", false,
-                "线框穿透方块显示");
-        public static final ConfigBoolean STRICT_NBT = new ConfigBoolean("strictNbt", false,
-                "严格校验 NBT：物品组件不一致时不计入缺失，也不互相顶替数量");
-        public static final ConfigBoolean NBT_MISMATCH_COLOR = new ConfigBoolean("nbtMismatchColor", true,
-                "严格校验时，物品相同但 NBT 不同的槽位换一种背景色提示");
-        public static final ConfigBoolean READ_NESTED_CONTAINERS = new ConfigBoolean("readNestedContainers", true,
-                "嵌套读取容器内容：箱子或背包里的潜影盒、收纳袋也算作可用物品（最多两层）");
-        public static final ConfigBoolean COUNT_ONLY_FIRST_MATCH = new ConfigBoolean("countOnlyFirstMatch", true,
-                "同一种物品只标注第一个匹配到的格子（背景与数量都不画），其余格子保持原样；关闭则每个格子都标");
-        public static final ConfigBoolean SPREAD_COUNT_BY_STACK_SIZE = new ConfigBoolean("spreadCountByStackSize", false,
-                "按物品最大堆叠数逐个格子标注到够为止；关闭则只在首个匹配格子标出全部需要数量");
-        public static final ConfigBoolean SPREAD_COUNT_FOR_NON_STACKABLE = new ConfigBoolean("spreadCountForNonStackable", false,
-                "不可堆叠物品是否也逐个格子标注；默认关闭，由一个格子标出全部需要数量");
-        public static final ConfigBoolean HINT_IN_PLAYER_INVENTORY = new ConfigBoolean("hintInPlayerInventory", false,
-                "在玩家背包界面也显示投影容器的缺货提示");
-        public static final ConfigInteger HINT_TEXT_OFFSET_X = new ConfigInteger("hintTextOffsetX", 2, 0, 16,
-                "缺货数量文字相对槽位左上角向右的像素");
-        public static final ConfigInteger HINT_TEXT_OFFSET_Y = new ConfigInteger("hintTextOffsetY", 2, 0, 16,
-                "缺货数量文字相对槽位左上角向下的像素");
-        public static final ConfigDouble HINT_TEXT_SCALE = new ConfigDouble("hintTextScale", 1.0D, 0.25D, 2.0D,
-                "缺货数量文字的字号倍数");
-        public static final ConfigHotkey OPEN_CONFIG_GUI = new ConfigHotkey("openConfigGui", "X,C",
-                "打开配置界面");
+        public static final ConfigBoolean ENABLED = new ConfigBoolean("enabled", false)
+                .apply(GENERIC_TRANSLATION_PREFIX);
+        public static final ConfigString TRIGGER_ITEM = new ConfigString("triggerItem", "minecraft:shulker_box")
+                .apply(GENERIC_TRANSLATION_PREFIX);
+        public static final ConfigBoolean SEE_THROUGH = new ConfigBoolean("seeThrough", false)
+                .apply(GENERIC_TRANSLATION_PREFIX);
+        public static final ConfigBoolean STRICT_NBT = new ConfigBoolean("strictNbt", false)
+                .apply(GENERIC_TRANSLATION_PREFIX);
+        public static final ConfigBoolean NBT_MISMATCH_COLOR = new ConfigBoolean("nbtMismatchColor", true)
+                .apply(GENERIC_TRANSLATION_PREFIX);
+        public static final ConfigBoolean READ_NESTED_CONTAINERS = new ConfigBoolean("readNestedContainers", true)
+                .apply(GENERIC_TRANSLATION_PREFIX);
+        public static final ConfigBoolean COUNT_ONLY_FIRST_MATCH = new ConfigBoolean("countOnlyFirstMatch", true)
+                .apply(GENERIC_TRANSLATION_PREFIX);
+        public static final ConfigBoolean SPREAD_COUNT_BY_STACK_SIZE = new ConfigBoolean("spreadCountByStackSize", false)
+                .apply(GENERIC_TRANSLATION_PREFIX);
+        public static final ConfigBoolean SPREAD_COUNT_FOR_NON_STACKABLE = new ConfigBoolean("spreadCountForNonStackable", false)
+                .apply(GENERIC_TRANSLATION_PREFIX);
+        public static final ConfigBoolean HINT_IN_PLAYER_INVENTORY = new ConfigBoolean("hintInPlayerInventory", false)
+                .apply(GENERIC_TRANSLATION_PREFIX);
+        public static final ConfigInteger HINT_TEXT_OFFSET_X = new ConfigInteger("hintTextOffsetX", 2, 0, 16)
+                .apply(GENERIC_TRANSLATION_PREFIX);
+        public static final ConfigInteger HINT_TEXT_OFFSET_Y = new ConfigInteger("hintTextOffsetY", 2, 0, 16)
+                .apply(GENERIC_TRANSLATION_PREFIX);
+        public static final ConfigDouble HINT_TEXT_SCALE = new ConfigDouble("hintTextScale", 1.0D, 0.25D, 2.0D)
+                .apply(GENERIC_TRANSLATION_PREFIX);
+        public static final ConfigHotkey OPEN_CONFIG_GUI = new ConfigHotkey("openConfigGui", "X,C")
+                .apply(GENERIC_TRANSLATION_PREFIX);
 
         public static final List<IConfigBase> OPTIONS = List.of(
                 ENABLED,
@@ -94,20 +98,20 @@ public class HighlightConfig implements IConfigHandler {
 
     /** 颜色统一用 #AARRGGBB，alpha 也由界面上的取色器调整。 */
     public static class Colors {
-        public static final ConfigColor PROJECTION_CONTAINER = new ConfigColor("projectionContainerColor", "#FF00FF00",
-                "投影容器线框");
-        public static final ConfigColor STORAGE_CONTAINER = new ConfigColor("storageContainerColor", "#FF0000FF",
-                "仓储容器线框");
-        public static final ConfigColor MATCHING_CONTAINER = new ConfigColor("matchingContainerColor", "#FFFFFF00",
-                "有可用物品的仓储箱线框");
-        public static final ConfigColor SLOT_PUT = new ConfigColor("slotPutColor", "#8040FF40",
-                "背包里该放进投影容器的槽位背景");
-        public static final ConfigColor SLOT_TAKE = new ConfigColor("slotTakeColor", "#6000FF00",
-                "仓储容器里该取出的槽位背景");
-        public static final ConfigColor SLOT_NBT_MISMATCH = new ConfigColor("slotNbtMismatchColor", "#60FF8000",
-                "严格校验时物品相同但 NBT 不同的槽位背景");
-        public static final ConfigColor SLOT_COUNT_TEXT = new ConfigColor("slotCountTextColor", "#FFFFFFFF",
-                "缺货数量文字");
+        public static final ConfigColor PROJECTION_CONTAINER = new ConfigColor("projectionContainerColor", "#FF00FF00")
+                .apply(COLORS_TRANSLATION_PREFIX);
+        public static final ConfigColor STORAGE_CONTAINER = new ConfigColor("storageContainerColor", "#FF0000FF")
+                .apply(COLORS_TRANSLATION_PREFIX);
+        public static final ConfigColor MATCHING_CONTAINER = new ConfigColor("matchingContainerColor", "#FFFFFF00")
+                .apply(COLORS_TRANSLATION_PREFIX);
+        public static final ConfigColor SLOT_PUT = new ConfigColor("slotPutColor", "#8040FF40")
+                .apply(COLORS_TRANSLATION_PREFIX);
+        public static final ConfigColor SLOT_TAKE = new ConfigColor("slotTakeColor", "#6000FF00")
+                .apply(COLORS_TRANSLATION_PREFIX);
+        public static final ConfigColor SLOT_NBT_MISMATCH = new ConfigColor("slotNbtMismatchColor", "#60FF8000")
+                .apply(COLORS_TRANSLATION_PREFIX);
+        public static final ConfigColor SLOT_COUNT_TEXT = new ConfigColor("slotCountTextColor", "#FFFFFFFF")
+                .apply(COLORS_TRANSLATION_PREFIX);
 
         public static final List<IConfigBase> OPTIONS = List.of(
                 PROJECTION_CONTAINER,

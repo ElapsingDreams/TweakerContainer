@@ -5,6 +5,7 @@ import cn.yireve.tweakercontainer.client.config.HighlightConfig;
 import fi.dy.masa.malilib.config.ConfigManager;
 import fi.dy.masa.malilib.gui.GuiConfigsBase;
 import fi.dy.masa.malilib.gui.button.ButtonGeneric;
+import fi.dy.masa.malilib.util.StringUtils;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -15,15 +16,18 @@ import java.util.List;
 public class GuiConfigs extends GuiConfigsBase {
 
     public GuiConfigs() {
-        super(10, 50, HighlightConfig.MOD_ID, null, "TweakerContainer Config");
+        // 标题同样交给语言文件：GuiConfigsBase 会自己对它做 StringUtils.translate
+        super(10, 50, HighlightConfig.MOD_ID, null, "tweakercontainer.gui.title");
     }
 
     @Override
     public void initGui() {
         super.initGui();
 
-        // 清除按钮：清空全部高亮状态
-        ButtonGeneric clearButton = new ButtonGeneric(10, 24, 100, 20, "清除全部高亮");
+        // 清除按钮：清空全部高亮状态。
+        // 注意 ButtonBase 只对悬停提示做翻译，按钮文字得自己翻好再传进去
+        ButtonGeneric clearButton = new ButtonGeneric(10, 24, 100, 20,
+                StringUtils.translate("tweakercontainer.gui.button.clear_all"));
         this.addButton(clearButton, (button, mouseButton) -> HighlightState.get().clearAll());
     }
 
