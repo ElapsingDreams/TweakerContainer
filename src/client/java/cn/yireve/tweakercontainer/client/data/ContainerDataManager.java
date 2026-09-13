@@ -2,6 +2,7 @@ package cn.yireve.tweakercontainer.client.data;
 
 import cn.yireve.tweakercontainer.client.HighlightState;
 import cn.yireve.tweakercontainer.client.config.HighlightConfig;
+import cn.yireve.tweakercontainer.client.utils.ContainerUtils;
 import com.mojang.logging.LogUtils;
 import fi.dy.masa.malilib.util.InventoryUtils;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
@@ -327,13 +328,14 @@ public final class ContainerDataManager {
 
     /** 服务端给的方块实体 NBT：转成背包写进缓存，大箱子顺手把另一半也带上。 */
     private void acceptServerContents(BlockPos pos, NbtCompound nbt) {
-        Inventory inventory = inventoryFromNbt(nbt);
+        World world = MinecraftClient.getInstance().world;
+        BlockState state = world != null ? world.getBlockState(pos) : null;
+
+        Inventory inventory = inventoryFromNbt(pos, state, nbt);
         if (inventory == null) {
             return;
         }
 
-        World world = MinecraftClient.getInstance().world;
-        BlockState state = world != null ? world.getBlockState(pos) : null;
         HighlightState.get().acceptStorageContents(pos, state, inventory);
         this.ensureChestPartner(pos, state);
     }
@@ -442,16 +444,41 @@ public final class ContainerDataManager {
         }
     }
 
-    /** 方块实体的 NBT（带 Items）转成背包；不是容器或没有内容时返回 null。 */
-    private static Inventory inventoryFromNbt(NbtCompound nbt) {
+    /**
+     * 方块实体的 NBT（带 Items）转成背包。
+     * <p>
+     * 注意空容器：malilib 的 {@code getNbtInventory} 对空内容会给 null，直接当成"没数据"的话，
+     * 大箱子里那一半空的就永远登记不上、也不会把另一半带出来（联机下"点有料的那半、空的那半不跟着框"就是这个原因）。
+     * 所以转换不出来时，按客户端这边的容器格子数建一个空背包——空是内容，不是没数据。
+     */
+    private static Inventory inventoryFromNbt(BlockPos pos, BlockState state, NbtCompound nbt) {
         World world = MinecraftClient.getInstance().world;
-        if (nbt == null || world == null) {
+        if (world == null) {
             return null;
         }
 
+        int expectedSize = expectedContainerSize(world, pos, state);
         DynamicRegistryManager registryManager = world.getRegistryManager();
-        Inventory inventory = InventoryUtils.getNbtInventory(nbt, -1, registryManager);
-        return inventory == null || inventory.size() <= 0 ? null : copyOf(inventory);
+
+        if (nbt != null) {
+            Inventory inventory = InventoryUtils.getNbtInventory(nbt, expectedSize, registryManager);
+            if (inventory != null && inventory.size() > 0) {
+                return copyOf(inventory);
+            }
+        }
+
+        return expectedSize > 0 ? new SimpleInventory(expectedSize) : null;
+    }
+
+    /** 这一格容器有多少个格子（靠客户端这边的方块实体推，空箱子也能推出 27）。 */
+    private static int expectedContainerSize(World world, BlockPos pos, BlockState state) {
+        if (state == null) {
+            return -1;
+        }
+
+        return ContainerUtils.validateContainer(world, pos, state)
+                .map(Inventory::size)
+                .orElse(-1);
     }
 
     /** 服务端那边的背包是活的，跨 tick 持有不安全，统一拷一份。 */

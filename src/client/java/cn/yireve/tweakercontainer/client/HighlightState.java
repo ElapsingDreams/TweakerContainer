@@ -345,6 +345,13 @@ public final class HighlightState {
                 ItemStack storedStack = storageInv.getStack(i);
                 if (containsNeeded(remainingNeeded, storedStack, MAX_NESTING_DEPTH)) {
                     matchingStorageContainers.add(storagePos);
+
+                    // 大箱子：一半有料就把另一半也标上，渲染那边才能合成整箱框，
+                    // 否则（空的那半不在名单里）会退化成只框一半
+                    BlockPos partner = getChestPartner(storagePos);
+                    if (partner != null) {
+                        matchingStorageContainers.add(partner);
+                    }
                     break;
                 }
             }
