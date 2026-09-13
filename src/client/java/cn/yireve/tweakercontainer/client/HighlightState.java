@@ -544,6 +544,17 @@ public final class HighlightState {
     }
 
     public void removeProjectContainer() {
+        // 投影区的箱子不能同时是材料容器：取消投影时顺手清掉同一格（大箱子两半都算）
+        // 可能残留的材料标记，免得原地留下蓝框
+        if (currentProjectionContainer != null) {
+            removeStorageContainer(currentProjectionContainer);
+
+            BlockPos partner = getProjectionContainerPartner();
+            if (partner != null) {
+                removeStorageContainer(partner);
+            }
+        }
+
         currentProjectionContainer = null;
         currentMissingItems.clear();
         projectionMissing.clear();
