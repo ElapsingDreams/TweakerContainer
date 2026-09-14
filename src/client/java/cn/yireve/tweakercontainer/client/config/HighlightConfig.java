@@ -78,7 +78,7 @@ public class HighlightConfig implements IConfigHandler {
                 .apply(GENERIC_TRANSLATION_PREFIX);
         public static final ConfigDouble HINT_TEXT_SCALE = new ConfigDouble("hintTextScale", 1.0D, 0.25D, 2.0D)
                 .apply(GENERIC_TRANSLATION_PREFIX);
-        public static final ConfigHotkey OPEN_CONFIG_GUI = new ConfigHotkey("openConfigGui", "X,C")
+        public static final ConfigHotkey OPEN_CONFIG_GUI = new ConfigHotkey("openConfigGui", "Z,C")
                 .apply(GENERIC_TRANSLATION_PREFIX);
         public static final ConfigOptionList CONTAINER_SOURCE = new ConfigOptionList("containerSource", ContainerSource.AUTO)
                 .apply(GENERIC_TRANSLATION_PREFIX);

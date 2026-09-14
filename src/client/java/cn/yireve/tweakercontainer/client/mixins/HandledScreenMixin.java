@@ -355,19 +355,21 @@ public abstract class HandledScreenMixin<T extends ScreenHandler> {
      */
     @Unique
     private boolean isHintSide(HighlightState state, Slot slot) {
-        // 创造模式物品栏不是"玩家背包界面"，它连容器上下文都没有，别在上面染色
-        if (isNonContainerScreen()) {
+        boolean playerSlot = slot.inventory instanceof PlayerInventory;
+
+        // 创造模式物品栏里只画正常背包格子；它那个"直接拿物品/销毁"的栏不画
+        if (isNonContainerScreen() && !playerSlot) {
             return false;
         }
 
-        if (slot.inventory instanceof PlayerInventory) {
+        if (playerSlot) {
             return isProjectionContainerOpen(state) || HighlightConfig.isHintInPlayerInventory();
         }
 
         return !isProjectionContainerOpen(state) && InventoryOverlay.getCurrentContainerPos() != null;
     }
 
-    /** 创造模式物品栏这类"不是容器"的界面：不染色，也不按容器去抓内容。 */
+    /** 创造模式物品栏这类"没有真正容器"的界面：不按容器抓内容，非背包格子也不染色。 */
     @Unique
     private boolean isNonContainerScreen() {
         return (Object) this instanceof CreativeInventoryScreen;
