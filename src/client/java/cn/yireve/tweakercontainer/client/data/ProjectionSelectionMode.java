@@ -10,11 +10,12 @@ import java.util.List;
  * <p>
  * SINGLE：右键一个就替换掉之前的（老行为）。
  * MULTI：右键逐个加入，再点一次取消，可以同时选多个投影容器。
- * （角点模式在下一版实现，先不暴露出来。）
+ * CORNER：手持触发物品左键点选框一角、右键点另一角，把框内"蓝图里也是容器"的位置整批加进来。
  */
 public enum ProjectionSelectionMode implements IConfigOptionListEntry {
     SINGLE("single", "tweakercontainer.config.projectionSelectionMode.single"),
-    MULTI("multi", "tweakercontainer.config.projectionSelectionMode.multi");
+    MULTI("multi", "tweakercontainer.config.projectionSelectionMode.multi"),
+    CORNER("corner", "tweakercontainer.config.projectionSelectionMode.corner");
 
     public static final List<ProjectionSelectionMode> VALUES = List.of(values());
 

@@ -16,9 +16,10 @@
   "tweakercontainer.config.generic.name.alwaysShowProjection": "Always Show The Projection Outline",
   "tweakercontainer.config.generic.comment.alwaysShowProjection": "Draw the projection container's outline even when the trigger item is not held; off by default, so the outline only shows while holding the trigger item",
   "tweakercontainer.config.generic.name.projectionSelectionMode": "Projection Selection Mode",
-  "tweakercontainer.config.generic.comment.projectionSelectionMode": "SINGLE: right-clicking a container replaces the previous pick. MULTI: right-click adds one, right-click again removes it (corner-point mode comes in the next version)",
+  "tweakercontainer.config.generic.comment.projectionSelectionMode": "SINGLE: right-clicking a container replaces the previous pick. MULTI: right-click adds one, right-click again removes it. CORNER: with the trigger item held, left-click one corner and right-click the other; every position inside the box whose schematic block is a container gets selected",
   "tweakercontainer.config.projectionSelectionMode.single": "Single",
   "tweakercontainer.config.projectionSelectionMode.multi": "Multi",
+  "tweakercontainer.config.projectionSelectionMode.corner": "Corner Box",
   "tweakercontainer.config.generic.name.containerSource": "Container Data Source",
   "tweakercontainer.config.generic.comment.containerSource": "Where the container contents come from.\nAUTO: read the built-in server in single player, ask the server when connected (the server needs Servux)\nINTEGRATED: only read the built-in server\nSERVUX: only ask the server\nSCREEN: only use the contents you have opened",
   "tweakercontainer.config.containerSource.auto": "Auto",
@@ -68,5 +69,6 @@
   "tweakercontainer.config.colors.comment.slotCountTextColor": "Colour of the shortage count text",
 
   "tweakercontainer.message.removed_schem": "Removed the projection container record",
-  "tweakercontainer.message.removed_storage": "Removed the material container record"
+  "tweakercontainer.message.removed_storage": "Removed the material container record",
+  "tweakercontainer.message.corner_selected": "Box-selected projection containers: %s added"
 }

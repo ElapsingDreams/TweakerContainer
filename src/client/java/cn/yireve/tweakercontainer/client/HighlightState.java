@@ -59,6 +59,9 @@ public final class HighlightState {
     // 投影容器：多选。大箱子只记"规范那一半"，另一半放配表里——两半各算一遍需求就重复了
     private final Set<BlockPos> projectionContainers = ConcurrentHashMap.newKeySet();
     private final Map<BlockPos, BlockPos> projectionPartners = new ConcurrentHashMap<>();
+    // 角点框选的两个角（角点模式用；只在客户端线程读写，渲染要读所以是 volatile）
+    private volatile BlockPos projectionCornerStart;
+    private volatile BlockPos projectionCornerEnd;
     // 匹配结果脏标记：标脏后每帧最多重算一次
     private volatile boolean dirty = true;
     // 兜底刷新间隔（毫秒）
@@ -186,6 +189,73 @@ public final class HighlightState {
     /** 该坐标是不是投影容器：大箱子的任意一半都算。 */
     public boolean isProjectionContainer(BlockPos pos) {
         return canonicalProjectionContainer(pos) != null;
+    }
+
+    // ---------- 角点框选 ----------
+
+    /** 选框起点（角点模式左键点的位置）；没设时返回 null。 */
+    public BlockPos getProjectionCornerStart() {
+        return projectionCornerStart;
+    }
+
+    /** 选框终点（角点模式右键点的位置）；没设时返回 null。 */
+    public BlockPos getProjectionCornerEnd() {
+        return projectionCornerEnd;
+    }
+
+    /**
+     * 记录选框的一角。
+     * <p>
+     * 重新点起点就是重新起一个框，会把旧的终点清掉（否则会拿旧终点直接框选）。
+     *
+     * @param start true = 起点（左键），false = 终点（右键）
+     * @return 两个角是否都齐了
+     */
+    public boolean setProjectionCorner(BlockPos pos, boolean start) {
+        if (pos == null) {
+            return false;
+        }
+
+        if (start) {
+            projectionCornerStart = pos.toImmutable();
+            projectionCornerEnd = null;
+        } else {
+            projectionCornerEnd = pos.toImmutable();
+        }
+
+        return projectionCornerStart != null && projectionCornerEnd != null;
+    }
+
+    /** 清掉选框（切换模式、断线时用）。 */
+    public void clearProjectionCorners() {
+        projectionCornerStart = null;
+        projectionCornerEnd = null;
+    }
+
+    /**
+     * 按当前两个角点框选：把框内"蓝图里也是容器"的位置整批加入投影集合。
+     * <p>
+     * 已经在集合里的（含大箱子另一半）会跳过，所以框选可以反复用、也可以和右键逐个选混着来。
+     *
+     * @return 本次新加入的数量
+     */
+    public int selectProjectionContainersInBox() {
+        BlockPos start = projectionCornerStart;
+        BlockPos end = projectionCornerEnd;
+        if (start == null || end == null) {
+            return 0;
+        }
+
+        int added = 0;
+        for (BlockPos pos : PlacementContainerAccess.findSchematicContainersInBox(start, end)) {
+            if (canonicalProjectionContainer(pos) != null) {
+                continue;
+            }
+            if (addProjectionContainer(pos, false)) {
+                added++;
+            }
+        }
+        return added;
     }
 
     // ---------- 槽位提示查询 ----------
@@ -883,6 +953,7 @@ public final class HighlightState {
         currentMissingItems.clear();
         projectionContainers.clear();
         projectionPartners.clear();
+        clearProjectionCorners();
         tempProcessingPos = null;
         dirty = false;
         ContainerDataManager.get().reset();

@@ -4,8 +4,10 @@ import cn.yireve.tweakercontainer.client.HighlightState;
 import cn.yireve.tweakercontainer.client.config.HighlightConfig;
 import cn.yireve.tweakercontainer.client.data.ContainerDataManager;
 import cn.yireve.tweakercontainer.client.data.ContainerSource;
+import cn.yireve.tweakercontainer.client.data.ProjectionSelectionMode;
 import cn.yireve.tweakercontainer.client.features.InventoryOverlay;
 import cn.yireve.tweakercontainer.client.features.PlacementContainerAccess;
+import net.fabricmc.fabric.api.event.player.AttackBlockCallback;
 import net.fabricmc.fabric.api.event.player.UseBlockCallback;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.text.Text;
@@ -13,6 +15,7 @@ import net.minecraft.util.ActionResult;
 import net.minecraft.util.Hand;
 import net.minecraft.util.hit.BlockHitResult;
 import net.minecraft.util.math.BlockPos;
+import net.minecraft.util.math.Direction;
 import net.minecraft.world.World;
 
 import static cn.yireve.tweakercontainer.client.BlockHighlighterRender.isHoldingTriggerItem;
@@ -27,6 +30,23 @@ public final class InteractionHandler {
 
     public static void setup() {
         UseBlockCallback.EVENT.register(InteractionHandler::onBlockUse);
+        AttackBlockCallback.EVENT.register(InteractionHandler::onBlockAttack);
+    }
+
+    /**
+     * 角点模式左键：把点的位置记为选框起点，并吃掉这次攻击。
+     * <p>
+     * FAIL 既取消客户端处理也不发包，所以起手挖方块也不会发生；
+     * 但按住左键不放时客户端走的是另一条 {@code updateBlockBreakingProgress}，
+     * 那条由 {@code ClientPlayerInteractionManagerMixin} 按 {@link #shouldSuppressBlockBreaking()} 拦。
+     */
+    private static ActionResult onBlockAttack(PlayerEntity player, World world, Hand hand, BlockPos pos, Direction direction) {
+        if (!world.isClient || !isCornerSelecting()) {
+            return ActionResult.PASS;
+        }
+
+        HighlightState.get().setProjectionCorner(pos, true);
+        return SUPPRESSED_RESULT;
     }
 
     private static ActionResult onBlockUse(PlayerEntity player, World world, Hand hand, BlockHitResult hitResult) {
@@ -59,6 +79,15 @@ public final class InteractionHandler {
                         pos.getX(), pos.getY(), pos.getZ()), true);
                 return SUPPRESSED_RESULT;
             }
+        }
+
+        // 角点模式右键：记下选框终点，然后把框内蓝图里是容器的位置整批选上。
+        // 潜行右键留给"清除标记"，不参与框选
+        if (!player.isSneaking() && hitResult.getType() == BlockHitResult.Type.BLOCK && isCornerSelecting()) {
+            state.setProjectionCorner(hitResult.getBlockPos(), false);
+            int added = state.selectProjectionContainersInBox();
+            player.sendMessage(Text.translatable("tweakercontainer.message.corner_selected", added), true);
+            return SUPPRESSED_RESULT;
         }
 
         // 右键容器：登记为投影/仓储容器并记录本次处理坐标（空手也算，界面提示要用）
@@ -102,6 +131,21 @@ public final class InteractionHandler {
     }
 
     /**
+     * 当前是不是角点框选手势：功能开着、手持触发物品、选了角点模式。
+     * <p>
+     * 手势期间左右键都不该干别的事（不开箱子、不挖方块、不登记容器）。
+     */
+    private static boolean isCornerSelecting() {
+        return isEnabled() && isHoldingTriggerItem()
+                && HighlightConfig.getProjectionSelectionMode() == ProjectionSelectionMode.CORNER;
+    }
+
+    /** 角点模式下按住左键不放也要挡住挖方块（起手那下由 AttackBlockCallback 拦）。 */
+    public static boolean shouldSuppressBlockBreaking() {
+        return isCornerSelecting();
+    }
+
+    /**
      * 登记容器的唯一入口。
      * <p>
      * {@link UseBlockCallback} 与 {@code ClientPlayerInteractionManagerMixin} 都会调到这里，
@@ -114,6 +158,13 @@ public final class InteractionHandler {
      * @return 是否登记成功
      */
     public static boolean handleContainerClick(PlayerEntity player, BlockHitResult hitResult) {
+        // 角点模式下手持触发物品时的左右键都是选框手势：不登记容器、也不改动投影集合。
+        // 必须挡在 InventoryOverlay.onContainerClick 之前，那个方法一进门就会改状态。
+        // 空手开箱子照旧登记（界面里的格子提示要用）
+        if (isCornerSelecting()) {
+            return false;
+        }
+
         if (player == null || player.isSneaking() || !isEnabled() || !InventoryOverlay.onContainerClick(hitResult)) {
             return false;
         }

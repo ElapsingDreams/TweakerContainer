@@ -72,10 +72,16 @@ public class InventoryOverlay {
         // 蓝图里同样是容器的位置（也就是投影区的箱子）只可能是投影来源，绝不能登记成材料容器，
         // 否则投影上会冒出蓝框、取消时也会提示成清了材料。蓝图内容读不出来（比如空箱子）就不登记
         if (PlacementContainerAccess.isSchematicContainer(pos, state)) {
-            if (HighlightConfig.getProjectionSelectionMode() == ProjectionSelectionMode.MULTI) {
-                highlightState.toggleProjectionContainer(pos);
-            } else {
-                highlightState.addProjectionContainer(pos, true);
+            switch (HighlightConfig.getProjectionSelectionMode()) {
+                case MULTI -> highlightState.toggleProjectionContainer(pos);
+                case SINGLE -> highlightState.addProjectionContainer(pos, true);
+                // 角点模式：投影选择只走左右键框选手势，右键不单独增删。
+                // 已经选中的投影容器照旧记下来，界面里的放入提示要用；没选中的就不算登记
+                case CORNER -> {
+                    if (!highlightState.isProjectionContainer(pos)) {
+                        return false;
+                    }
+                }
             }
         } else {
             // 不是投影容器，作为仓储容器处理；重复打开只会刷新

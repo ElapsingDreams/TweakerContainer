@@ -16,9 +16,10 @@
   "tweakercontainer.config.generic.name.alwaysShowProjection": "常显投影绿框",
   "tweakercontainer.config.generic.comment.alwaysShowProjection": "不手持触发物品时也画出投影容器的绿框；默认关闭，只有手持触发物品才画",
   "tweakercontainer.config.generic.name.projectionSelectionMode": "投影容器选取方式",
-  "tweakercontainer.config.generic.comment.projectionSelectionMode": "单选：右键一个就替换掉之前的；多选：右键逐个加入、再点一次取消；（角点模式下一版加）",
+  "tweakercontainer.config.generic.comment.projectionSelectionMode": "单选：右键一个就替换掉之前的；多选：右键逐个加入、再点一次取消；角点：手持触发物品左键点选框一角、右键点另一角，框内蓝图里是容器的位置会整批选上",
   "tweakercontainer.config.projectionSelectionMode.single": "单选",
   "tweakercontainer.config.projectionSelectionMode.multi": "多选",
+  "tweakercontainer.config.projectionSelectionMode.corner": "角点框选",
   "tweakercontainer.config.generic.name.containerSource": "容器数据来源",
   "tweakercontainer.config.generic.comment.containerSource": "容器内容从哪来。\n自动：单人直接读内置服务端，联机时向服务端查询（需要服务端装了 Servux）\n内置服务端：只读本地内置服务端\n服务端查询：只向服务端要数据\n只用开界面：只认自己开过界面抓到的内容",
   "tweakercontainer.config.containerSource.auto": "自动",
@@ -68,5 +69,6 @@
   "tweakercontainer.config.colors.comment.slotCountTextColor": "缺货数量文字",
 
   "tweakercontainer.message.removed_schem": "已移除投影记录容器",
-  "tweakercontainer.message.removed_storage": "已移除材料记录容器"
+  "tweakercontainer.message.removed_storage": "已移除材料记录容器",
+  "tweakercontainer.message.corner_selected": "框选投影容器：新增 %s 个"
 }

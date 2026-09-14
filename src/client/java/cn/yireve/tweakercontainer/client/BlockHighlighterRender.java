@@ -1,6 +1,7 @@
 package cn.yireve.tweakercontainer.client;
 
 import cn.yireve.tweakercontainer.client.config.HighlightConfig;
+import cn.yireve.tweakercontainer.client.data.ProjectionSelectionMode;
 import com.mojang.blaze3d.pipeline.RenderPipeline;
 import com.mojang.logging.LogUtils;
 import fi.dy.masa.malilib.render.MaLiLibPipelines;
@@ -94,6 +95,31 @@ public final class BlockHighlighterRender {
         // 投影容器的绿框：手持触发物品时总是画，另外可以由配置要求一直显示
         if (isHoldingTrigger || HighlightConfig.isAlwaysShowProjection()) {
             renderProjectionContainer(state, cameraPos, throughWalls);
+
+            // 选框只在角点模式下画：换了模式还留着旧框会很莫名
+            if (HighlightConfig.getProjectionSelectionMode() == ProjectionSelectionMode.CORNER) {
+                renderProjectionCorners(state, cameraPos, throughWalls);
+            }
+        }
+    }
+
+    /**
+     * 角点框选的选框：只有一个角时画那一格，两个角都有时画整框。
+     * <p>
+     * 用的是投影容器同一个颜色——框选出来的东西也是投影容器，颜色一致才看得出对应关系。
+     */
+    private static void renderProjectionCorners(HighlightState state, Vec3d cameraPos, boolean throughWalls) {
+        BlockPos start = state.getProjectionCornerStart();
+        if (start == null) {
+            return;
+        }
+
+        Color4f color = HighlightConfig.getProjectionContainerColor();
+        BlockPos end = state.getProjectionCornerEnd();
+        if (end == null) {
+            renderOutline(cameraPos, start, color, throughWalls);
+        } else {
+            renderChestOutline(cameraPos, start, end, color, throughWalls);
         }
     }
 
