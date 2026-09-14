@@ -1,6 +1,9 @@
 package cn.yireve.tweakercontainer.client.handler;
 
 import cn.yireve.tweakercontainer.client.HighlightState;
+import cn.yireve.tweakercontainer.client.config.HighlightConfig;
+import cn.yireve.tweakercontainer.client.data.ContainerDataManager;
+import cn.yireve.tweakercontainer.client.data.ContainerSource;
 import cn.yireve.tweakercontainer.client.features.InventoryOverlay;
 import cn.yireve.tweakercontainer.client.features.PlacementContainerAccess;
 import net.fabricmc.fabric.api.event.player.UseBlockCallback;
@@ -59,9 +62,32 @@ public final class InteractionHandler {
         }
 
         // 右键容器：登记为投影/仓储容器并记录本次处理坐标
-        handleContainerClick(player, hitResult);
+        if (handleContainerClick(player, hitResult) && shouldKeepContainerClosed(hitResult.getBlockPos())) {
+            // 内容已经能从服务端拿到（内置服务端 / Servux / 原版查询），就不打开界面了。
+            // 注意把待抓取坐标清掉：界面不会开，留着会被下一个界面（比如背包）误当成容器去抓
+            state.setTempProcessingPos(null);
+            return ActionResult.SUCCESS;
+        }
 
         return ActionResult.PASS;
+    }
+
+    /**
+     * 这次右键要不要拦下、不打开容器。
+     * <p>
+     * 只有"确实还能从别处拿到内容"时才拦：数据源退化成只能用开界面抓取时，照旧让它打开。
+     * 投影来源不拦——那是往里放材料的地方，玩家要能开。
+     */
+    private static boolean shouldKeepContainerClosed(BlockPos pos) {
+        if (!HighlightConfig.isSuppressContainerOpening()) {
+            return false;
+        }
+
+        if (ContainerDataManager.get().effectiveSource() == ContainerSource.SCREEN) {
+            return false;
+        }
+
+        return !HighlightState.get().isProjectionContainer(pos);
     }
 
     /**

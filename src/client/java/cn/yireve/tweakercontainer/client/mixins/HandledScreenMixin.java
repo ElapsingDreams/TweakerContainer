@@ -6,6 +6,7 @@ import cn.yireve.tweakercontainer.client.features.InventoryOverlay;
 import fi.dy.masa.malilib.util.ItemType;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gui.DrawContext;
+import net.minecraft.client.gui.screen.ingame.CreativeInventoryScreen;
 import net.minecraft.client.gui.screen.ingame.HandledScreen;
 import net.minecraft.client.gui.screen.ingame.ScreenHandlerProvider;
 import net.minecraft.entity.player.PlayerInventory;
@@ -88,9 +89,9 @@ public abstract class HandledScreenMixin<T extends ScreenHandler> {
     private void onInit(CallbackInfo ci) {
         if (!isEnabled()) return;
 
-        // 只处理刚右击过的容器；玩家背包等界面没有待处理坐标
+        // 只处理刚右击过的容器；玩家背包、创造模式物品栏等界面没有待处理坐标
         BlockPos clickedPos = HighlightState.get().getAndClearTempProcessingPos();
-        if (clickedPos == null) return;
+        if (clickedPos == null || isNonContainerScreen()) return;
 
         ScreenHandler handler = ((ScreenHandlerProvider<ScreenHandler>) (Object) this).getScreenHandler();
         if (tcCapturedSyncId != null && tcCapturedSyncId == handler.syncId) {
@@ -354,11 +355,22 @@ public abstract class HandledScreenMixin<T extends ScreenHandler> {
      */
     @Unique
     private boolean isHintSide(HighlightState state, Slot slot) {
+        // 创造模式物品栏不是"玩家背包界面"，它连容器上下文都没有，别在上面染色
+        if (isNonContainerScreen()) {
+            return false;
+        }
+
         if (slot.inventory instanceof PlayerInventory) {
             return isProjectionContainerOpen(state) || HighlightConfig.isHintInPlayerInventory();
         }
 
         return !isProjectionContainerOpen(state) && InventoryOverlay.getCurrentContainerPos() != null;
+    }
+
+    /** 创造模式物品栏这类"不是容器"的界面：不染色，也不按容器去抓内容。 */
+    @Unique
+    private boolean isNonContainerScreen() {
+        return (Object) this instanceof CreativeInventoryScreen;
     }
 
     @Unique

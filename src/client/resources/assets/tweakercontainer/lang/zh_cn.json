@@ -9,6 +9,8 @@
   "tweakercontainer.config.generic.comment.triggerItem": "手持该物品时显示线框，填写物品 ID",
   "tweakercontainer.config.generic.name.seeThrough": "穿透显示",
   "tweakercontainer.config.generic.comment.seeThrough": "线框穿透方块显示",
+  "tweakercontainer.config.generic.name.suppressContainerOpening": "拿到数据就不打开容器",
+  "tweakercontainer.config.generic.comment.suppressContainerOpening": "手持触发物品右键容器时，只要内容能从服务端取到（单机/局域网走内置服务端，联机走 Servux 或原版查询）就不打开界面；投影来源仍会打开，方便往里放材料",
   "tweakercontainer.config.generic.name.containerSource": "容器数据来源",
   "tweakercontainer.config.generic.comment.containerSource": "容器内容从哪来。\n自动：单人直接读内置服务端，联机时向服务端查询（需要服务端装了 Servux）\n内置服务端：只读本地内置服务端\n服务端查询：只向服务端要数据\n只用开界面：只认自己开过界面抓到的内容",
   "tweakercontainer.config.containerSource.auto": "自动",
