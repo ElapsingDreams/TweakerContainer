@@ -48,7 +48,7 @@ public final class InteractionHandler {
             if (projectionSide && state.removeProjectContainer()) {
                 player.sendMessage(Text.translatable("tweakercontainer.message.removed_schem",
                         pos.getX(), pos.getY(), pos.getZ()), true);
-                return ActionResult.SUCCESS;
+                return SUPPRESSED_RESULT;
             }
 
             // 材料容器：必须登记着、而且此刻确实画得出蓝框（方块还是原来那个容器）才清。
@@ -57,7 +57,7 @@ public final class InteractionHandler {
                     && state.removeWholeStorageContainer(pos)) {
                 player.sendMessage(Text.translatable("tweakercontainer.message.removed_storage",
                         pos.getX(), pos.getY(), pos.getZ()), true);
-                return ActionResult.SUCCESS;
+                return SUPPRESSED_RESULT;
             }
         }
 
@@ -66,11 +66,21 @@ public final class InteractionHandler {
             // 内容已经能从服务端拿到（内置服务端 / Servux / 原版查询），就不打开界面了。
             // 注意把待抓取坐标清掉：界面不会开，留着会被下一个界面（比如背包）误当成容器去抓
             state.setTempProcessingPos(null);
-            return ActionResult.SUCCESS;
+            return SUPPRESSED_RESULT;
         }
 
         return ActionResult.PASS;
     }
+
+    /**
+     * "这次交互算失败"的结果，用来把右键吃掉。
+     * <p>
+     * 不能用 {@link ActionResult#SUCCESS}：Fabric 的 UseBlockCallback 对"被接受"的结果
+     * （SUCCESS / CONSUME）会顺手把 {@code PlayerInteractBlockC2SPacket} 发给服务端，
+     * 服务端照样会把容器打开——这就是"服务端明明能拿到数据，界面还是弹出来"的原因。
+     * FAIL 不被接受，既取消客户端处理、也不会发包。
+     */
+    private static final ActionResult SUPPRESSED_RESULT = ActionResult.FAIL;
 
     /**
      * 这次右键要不要拦下、不打开容器。
