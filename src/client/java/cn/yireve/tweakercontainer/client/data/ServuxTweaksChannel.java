@@ -27,7 +27,18 @@ import java.util.concurrent.ConcurrentHashMap;
  * → 收到 metadata 响应后开始发方块实体请求 → 响应按坐标匹配。握手或请求连续失败就整条通道作废，
  * 由 {@link ContainerDataManager} 退回原版查询 / 开界面抓取。
  * <p>
- * 同一通道可能已被别的模组（tweakeroo）注册，注册撞车时不抢，直接让这条通道失效。
+ * 同一通道 tweakeroo 也在用。它的载荷类和我们的不是同一个，而 Fabric 的注册表按通道只留一份编码器，
+ * 谁先注册谁生效：先注册的那个模组的编码器会去解另一个模组的载荷类，发包时 ClassCastException，
+ * 在 netty 线程上炸掉连接（单机没事，一进服务器就被踢）。
+ * <p>
+ * 所以这里分两种跑法：
+ * <ul>
+ *     <li>tweakeroo 在场：完全不注册，借它的载荷类收发（见 {@link TweakerooBridge}），
+ *     回包从 {@code CustomPayloadS2CPacketMixin} 那里拿——Fabric 一个通道只挂一个 receiver，
+ *     那个位置是它的，抢过来会让它收不到自己的回包</li>
+ *     <li>tweakeroo 不在场：按正常方式自己注册；万一还是被别人占了（未知模组），
+ *     不跟它抢，这条通道直接判死</li>
+ * </ul>
  */
 public final class ServuxTweaksChannel {
     private static final Logger LOGGER = LogUtils.getLogger();
@@ -51,6 +62,10 @@ public final class ServuxTweaksChannel {
     private final Set<BlockPos> waiting = ConcurrentHashMap.newKeySet();
 
     private boolean installed;
+    /** 注册不是自己做的，而是借 tweakeroo 的（收发都要走它那套）。 */
+    private boolean borrowed;
+    /** 借用模式下确认 tweakeroo 真的把通道注册上了（没注册就发包会炸连接）。 */
+    private boolean borrowedUsable;
     private boolean handshakeSent;
     private long handshakeSentAt;
     private boolean servuxConfirmed;
@@ -73,6 +88,15 @@ public final class ServuxTweaksChannel {
     }
 
     private void install() {
+        // tweakeroo 也在用这个通道：注册的事全交给它，我们借它的载荷类收发。
+        // 关键是不能"抢"——先注册的一方会顶掉另一方的编码器，另一方再发包就是 ClassCastException
+        if (TweakerooBridge.isPresent()) {
+            this.borrowed = true;
+            this.installed = true;
+            LOGGER.info("检测到 tweakeroo，servux:tweaks 通道让给它，本项目改借它的载荷类收发");
+            return;
+        }
+
         try {
             PayloadTypeRegistry.playC2S().register(ServuxTweaksPayload.ID, ServuxTweaksPayload.CODEC);
             PayloadTypeRegistry.playS2C().register(ServuxTweaksPayload.ID, ServuxTweaksPayload.CODEC);
@@ -80,7 +104,7 @@ public final class ServuxTweaksChannel {
                     (payload, context) -> context.client().execute(() -> this.onPacket(payload.data())));
             this.installed = true;
         } catch (Throwable t) {
-            // 通道已被别的模组注册（例如 tweakeroo 在跑），不跟它抢：这条通道直接判死
+            // 通道已被别的模组注册，不跟它抢：这条通道直接判死
             this.installed = false;
             LOGGER.warn("servux:tweaks 通道注册失败（多半是别的模组已占用），联机数据改用原版查询或开界面抓取", t);
         }
@@ -96,14 +120,42 @@ public final class ServuxTweaksChannel {
             return;
         }
 
+        if (this.borrowed) {
+            // 借道的前提是 tweakeroo 真的注册了通道。它没注册的话，我们照它的载荷类发包会在编码阶段
+            // 炸掉连接，所以这里先核实一次；核实不了就整条通道作废，退回别的数据源
+            this.borrowedUsable = isChannelRegistered();
+            if (!this.borrowedUsable) {
+                LOGGER.warn("tweakeroo 在场但没有注册 servux:tweaks 通道，本项目联机数据改用原版查询或开界面抓取");
+                return;
+            }
+        }
+
         this.handshakeSent = true;
         this.handshakeSentAt = System.currentTimeMillis();
         this.send(ServuxTweaksPacket.metadataRequest(modVersion()));
     }
 
+    /**
+     * 通道的 serverbound 编码器注册上了没有。
+     * <p>
+     * Fabric 只给了注册接口、没给查询接口，只能问它的实现类要；拿不到结论一律当"没注册"，
+     * 宁可退回别的数据源也不要冒着炸掉连接的风险发包。
+     */
+    private static boolean isChannelRegistered() {
+        try {
+            Object registry = PayloadTypeRegistry.playC2S();
+            Object codec = registry.getClass().getMethod("get", Identifier.class).invoke(registry, CHANNEL_ID);
+            return codec != null;
+        } catch (Throwable t) {
+            LOGGER.warn("没法确认 servux:tweaks 通道的注册状态，按没注册处理", t);
+            return false;
+        }
+    }
+
     private void reset() {
         this.pending.clear();
         this.waiting.clear();
+        this.borrowedUsable = false;
         this.handshakeSent = false;
         this.servuxConfirmed = false;
         this.failedUntil = 0L;
@@ -112,7 +164,8 @@ public final class ServuxTweaksChannel {
 
     /** 这条通道现在还能不能用（握手还没结果时也算"能用"，请求会先排队；失败则进入冷却）。 */
     public boolean isAvailable() {
-        return this.installed && System.currentTimeMillis() >= this.failedUntil;
+        return this.installed && (!this.borrowed || this.borrowedUsable)
+                && System.currentTimeMillis() >= this.failedUntil;
     }
 
     /**
@@ -193,6 +246,12 @@ public final class ServuxTweaksChannel {
         Set<BlockPos> queued = Set.copyOf(this.waiting);
         this.waiting.clear();
 
+        // 借用模式下握手失败，说明我们这条旁路根本读不到回包（注入没生效，或服务端没装 Servux）。
+        // 再重试只会每隔半分钟刷一行日志，直接判死，这一局都用别的数据源
+        if (this.borrowed && handshakeFailed) {
+            this.borrowedUsable = false;
+        }
+
         LOGGER.warn(handshakeFailed
                         ? "Servux 握手没回应（服务端没装 Servux，或 tweaks_data 权限不放行），{} 秒后重试；期间联机数据退原版查询/开界面"
                         : "Servux 连续 {} 次请求没回包，{} 秒后重新握手；期间联机数据退原版查询/开界面",
@@ -207,7 +266,41 @@ public final class ServuxTweaksChannel {
         if (MinecraftClient.getInstance().getNetworkHandler() == null) {
             return;
         }
+
+        if (this.borrowed) {
+            CustomPayload payload = TweakerooBridge.create(packet);
+            if (payload == null) {
+                // 借不到就别发：发一个编码不了的包会把整条连接打断
+                return;
+            }
+            ClientPlayNetworking.send(payload);
+            return;
+        }
+
         ClientPlayNetworking.send(new ServuxTweaksPayload(packet));
+    }
+
+    /**
+     * 借用模式下的收包入口，由 {@code CustomPayloadS2CPacketMixin} 在报文对象建好之后调用。
+     * <p>
+     * 走这条路而不是 Fabric 的 receiver，是因为一个通道只能挂一个 receiver 且是先到先得：
+     * 那个位置是 tweakeroo 的，抢过来会让它收不到自己的回包（Fabric 只是 putIfAbsent，
+     * 失败连个警告都没有，坏得不知不觉）。
+     * <p>
+     * 这里跑在网络线程上，只读字段、不改状态；真正处理回包丢回客户端线程做。
+     */
+    public void onIncomingPayload(CustomPayload payload) {
+        if (!this.borrowed || payload == null || !CHANNEL_ID.equals(payload.getId().id())) {
+            return;
+        }
+
+        ServuxTweaksPacket packet = TweakerooBridge.read(payload);
+        if (packet == null) {
+            return;
+        }
+
+        MinecraftClient client = MinecraftClient.getInstance();
+        client.execute(() -> this.onPacket(packet));
     }
 
     private void onPacket(ServuxTweaksPacket packet) {

@@ -54,6 +54,18 @@ public final class ServuxTweaksPacket {
         return new ServuxTweaksPacket(TYPE_C2S_BLOCK_ENTITY_REQUEST, pos.toImmutable(), null);
     }
 
+    /**
+     * 借道 tweakeroo 时，用它的报文对象还原出我们自己的结构（字段与线格式一致，只是壳子不同）。
+     */
+    static ServuxTweaksPacket metadataResponse() {
+        return new ServuxTweaksPacket(TYPE_S2C_METADATA, null, null);
+    }
+
+    /** 同上，方块 NBT 响应。 */
+    static ServuxTweaksPacket blockNbtResponse(BlockPos pos, @Nullable NbtCompound nbt) {
+        return new ServuxTweaksPacket(TYPE_S2C_BLOCK_NBT_RESPONSE_SIMPLE, pos, nbt);
+    }
+
     public int type() {
         return this.type;
     }

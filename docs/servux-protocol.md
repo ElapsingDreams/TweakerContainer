@@ -76,3 +76,23 @@
 `EntityDataManager`：`blockEntityCache`（pos → `Pair<时间戳, Pair<BlockEntity, NBT>>`）、`pendingBlockEntitiesQueue`、
 `tickCache`/`getCacheTimeout`、`shouldUseQuery()`（有 op 状态或 15 分钟窗口内才查询）、
 `handleVanillaQueryNbt(int txId, NBT)`、`handleBlockEntityData(pos, NBT, channel)`、`getBlockInventory(World, BlockPos, boolean)`。
+
+## 7. 通道是共享的：和 tweakeroo 同时装了怎么办
+
+Fabric 的载荷注册表（`PayloadTypeRegistry`）按通道 id 只存**一份**编码器，`register` 撞车时抛 `IllegalArgumentException`：
+
+- tweakeroo 走 malilib 的 `IPluginClientPlayHandler.registerPlayPayload`，那个 default 方法把异常接住、
+  打一行 error（`registerPlayPayload: channel ID [{}] is is already registered`），**然后照样 `setPlayRegistered` 继续发包**
+- 于是"先注册的那个模组的编码器"会去解"另一个模组的载荷类"：发包时 `ClassCastException`，
+  在 netty 编码线程上抛出 → `EncoderException: Failed to encode packet 'serverbound/minecraft:custom_payload' (servux:tweaks)`
+  → 客户端以 `Internal Exception` 掉线（单机不触发，因为那时两边都不发包）
+
+因此本项目**先看 tweakeroo 在不在**，在就完全不注册，改成借它的载荷类收发：
+
+- 发包：反射它的 `ServuxTweaksPacket.BlockEntityRequest(BlockPos)` / `MetadataRequest(NbtCompound)`
+  与 `ServuxTweaksPacket$Payload(ServuxTweaksPacket)`（全是公开成员，字节与我们的实现一致，见第 2 节）
+- 收包：Fabric 的 `GlobalReceiverRegistry` 每个通道也是只留**一个** receiver（`putIfAbsent`，抢不到还不报错），
+  那个位置必须留给 tweakeroo，否则它收不到自己的回包；所以我们在
+  `CustomPayloadS2CPacket` 的构造器上挂钩子读一份（`client/mixins/CustomPayloadS2CPacketMixin`）
+- 发包前先确认它的 codec 真的注册上了（Fabric 没有公开查询接口，只能问 `PayloadTypeRegistryImpl#get(Identifier)`）；
+  确认不了就整条通道作废，退回原版查询 / 开界面抓取——宁可少一个数据源，也不能发一个编码不了的包把连接打断
