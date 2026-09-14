@@ -92,6 +92,8 @@ public class HighlightConfig implements IConfigHandler {
                 .apply(GENERIC_TRANSLATION_PREFIX);
         public static final ConfigBoolean SUPPRESS_PROJECTION_OPENING = new ConfigBoolean("suppressProjectionOpening", false)
                 .apply(GENERIC_TRANSLATION_PREFIX);
+        public static final ConfigBoolean ALWAYS_SHOW_PROJECTION = new ConfigBoolean("alwaysShowProjection", false)
+                .apply(GENERIC_TRANSLATION_PREFIX);
 
         public static final List<IConfigBase> OPTIONS = List.of(
                 ENABLED,
@@ -99,6 +101,7 @@ public class HighlightConfig implements IConfigHandler {
                 SEE_THROUGH,
                 SUPPRESS_CONTAINER_OPENING,
                 SUPPRESS_PROJECTION_OPENING,
+                ALWAYS_SHOW_PROJECTION,
                 CONTAINER_SOURCE,
                 CONTAINER_REFRESH_INTERVAL,
                 CONTAINER_REFRESH_BATCH_SIZE,
@@ -181,6 +184,11 @@ public class HighlightConfig implements IConfigHandler {
     /** 投影来源（往里面放材料的那个容器）是否也一起拦下不打开。 */
     public static boolean isSuppressProjectionOpening() {
         return Generic.SUPPRESS_PROJECTION_OPENING.getBooleanValue();
+    }
+
+    /** 不手持触发物品时也显示投影容器的绿框。 */
+    public static boolean isAlwaysShowProjection() {
+        return Generic.ALWAYS_SHOW_PROJECTION.getBooleanValue();
     }
 
     /** 容器内容的数据源；具体走哪条由 {@code ContainerDataManager} 结合实际环境解析。 */

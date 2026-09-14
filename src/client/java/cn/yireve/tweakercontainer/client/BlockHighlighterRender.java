@@ -83,24 +83,35 @@ public final class BlockHighlighterRender {
                 renderContainer(state, client.world, cameraPos, storagePos, storageColor, throughWalls,
                         state.getStorageContainers());
             }
-
-            BlockPos projectionContainer = state.getCurrentProjectionContainer();
-            if (projectionContainer != null) {
-                Color4f projectionColor = HighlightConfig.getProjectionContainerColor();
-                BlockPos projectionPartner = state.getProjectionContainerPartner();
-                if (projectionPartner != null) {
-                    // 投影容器是大箱子时框整个箱子，两半之间共用的那条棱不画
-                    renderChestOutline(cameraPos, projectionContainer, projectionPartner, projectionColor, throughWalls);
-                } else {
-                    renderOutline(cameraPos, projectionContainer, projectionColor, throughWalls);
-                }
-            }
         } else {
             Set<BlockPos> matching = state.getMatchingStorageContainers();
             Color4f matchingColor = HighlightConfig.getMatchingContainerColor();
             for (BlockPos matchingPos : matching) {
                 renderContainer(state, client.world, cameraPos, matchingPos, matchingColor, throughWalls, matching);
             }
+        }
+
+        // 投影容器的绿框：手持触发物品时总是画，另外可以由配置要求一直显示
+        if (isHoldingTrigger || HighlightConfig.isAlwaysShowProjection()) {
+            renderProjectionContainer(state, cameraPos, throughWalls);
+        }
+    }
+
+    /** 画投影容器（大箱子时框整个箱子）。 */
+    private static void renderProjectionContainer(HighlightState state, Vec3d cameraPos, boolean throughWalls) {
+        BlockPos projectionContainer = state.getCurrentProjectionContainer();
+        if (projectionContainer == null) {
+            return;
+        }
+
+        Color4f projectionColor = HighlightConfig.getProjectionContainerColor();
+        BlockPos projectionPartner = state.getProjectionContainerPartner();
+
+        if (projectionPartner != null) {
+            // 两半之间共用的那条棱不画
+            renderChestOutline(cameraPos, projectionContainer, projectionPartner, projectionColor, throughWalls);
+        } else {
+            renderOutline(cameraPos, projectionContainer, projectionColor, throughWalls);
         }
     }
 

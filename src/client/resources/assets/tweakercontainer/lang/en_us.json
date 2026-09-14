@@ -13,6 +13,8 @@
   "tweakercontainer.config.generic.comment.suppressContainerOpening": "While holding the trigger item, right-clicking a container just registers it and keeps the screen closed when the contents can be fetched from the server (built-in server in single player, Servux or the vanilla query on a server)",
   "tweakercontainer.config.generic.name.suppressProjectionOpening": "Also Keep The Projection Container Closed",
   "tweakercontainer.config.generic.comment.suppressProjectionOpening": "The projection container stays openable by default so you can put materials in; enable this to keep that one closed as well",
+  "tweakercontainer.config.generic.name.alwaysShowProjection": "Always Show The Projection Outline",
+  "tweakercontainer.config.generic.comment.alwaysShowProjection": "Draw the projection container's outline even when the trigger item is not held; off by default, so the outline only shows while holding the trigger item",
   "tweakercontainer.config.generic.name.containerSource": "Container Data Source",
   "tweakercontainer.config.generic.comment.containerSource": "Where the container contents come from.\nAUTO: read the built-in server in single player, ask the server when connected (the server needs Servux)\nINTEGRATED: only read the built-in server\nSERVUX: only ask the server\nSCREEN: only use the contents you have opened",
   "tweakercontainer.config.containerSource.auto": "Auto",
