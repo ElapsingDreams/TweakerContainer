@@ -55,8 +55,10 @@ public final class HighlightState {
     private final Set<BlockPos> matchingStorageContainers = ConcurrentHashMap.newKeySet();
     private final List<ItemStack> currentMissingItems = new CopyOnWriteArrayList<>();
 
-    private volatile BlockPos currentProjectionContainer;
     private volatile BlockPos tempProcessingPos;
+    // 投影容器：多选。大箱子只记"规范那一半"，另一半放配表里——两半各算一遍需求就重复了
+    private final Set<BlockPos> projectionContainers = ConcurrentHashMap.newKeySet();
+    private final Map<BlockPos, BlockPos> projectionPartners = new ConcurrentHashMap<>();
     // 匹配结果脏标记：标脏后每帧最多重算一次
     private volatile boolean dirty = true;
     // 兜底刷新间隔（毫秒）
@@ -137,29 +139,53 @@ public final class HighlightState {
         return Collections.unmodifiableSet(matchingStorageContainers);
     }
 
-    public BlockPos getCurrentProjectionContainer() {
-        return currentProjectionContainer;
+    /** 所有选中的投影容器（大箱子只有规范那一半）。 */
+    public Set<BlockPos> getProjectionContainers() {
+        return Collections.unmodifiableSet(projectionContainers);
     }
 
-    /** 投影容器大箱子的另一半；不是大箱子、或对面不是箱子时返回 null。 */
-    public BlockPos getProjectionContainerPartner() {
-        BlockPos projection = currentProjectionContainer;
-        if (projection == null) {
+    /** 该投影容器大箱子的另一半；不是大箱子、或对面不是箱子时返回 null。 */
+    public BlockPos getProjectionContainerPartner(BlockPos pos) {
+        if (pos == null) {
             return null;
         }
 
+        BlockPos partner = projectionPartners.get(pos);
+        if (partner != null) {
+            return partner;
+        }
+
         World world = MinecraftClient.getInstance().world;
-        return world == null ? null : findChestPartner(world, projection, world.getBlockState(projection));
+        return world == null ? null : findChestPartner(world, pos, world.getBlockState(pos));
+    }
+
+    /**
+     * 该坐标归到哪个投影容器上（大箱子的任意一半都归到规范那一半）。
+     *
+     * @return 不是投影容器时返回 null
+     */
+    public BlockPos canonicalProjectionContainer(BlockPos pos) {
+        if (pos == null || projectionContainers.isEmpty()) {
+            return null;
+        }
+
+        BlockPos immutablePos = pos.toImmutable();
+        if (projectionContainers.contains(immutablePos)) {
+            return immutablePos;
+        }
+
+        for (Map.Entry<BlockPos, BlockPos> entry : projectionPartners.entrySet()) {
+            if (immutablePos.equals(entry.getValue())) {
+                return entry.getKey();
+            }
+        }
+
+        return null;
     }
 
     /** 该坐标是不是投影容器：大箱子的任意一半都算。 */
     public boolean isProjectionContainer(BlockPos pos) {
-        if (pos == null || currentProjectionContainer == null) {
-            return false;
-        }
-
-        BlockPos immutablePos = pos.toImmutable();
-        return immutablePos.equals(currentProjectionContainer) || immutablePos.equals(getProjectionContainerPartner());
+        return canonicalProjectionContainer(pos) != null;
     }
 
     // ---------- 槽位提示查询 ----------
@@ -277,7 +303,7 @@ public final class HighlightState {
         matchingStorageContainers.clear();
         remainingNeeded.clear();
         projectionMissing.clear();
-        if (currentProjectionContainer == null || currentMissingItems.isEmpty()) {
+        if (projectionContainers.isEmpty() || currentMissingItems.isEmpty()) {
             return;
         }
 
@@ -290,16 +316,14 @@ public final class HighlightState {
             }
         }
 
-        // 2. 投影容器里已有的数量（大箱子的内容统一记在登记坐标下，登记坐标落在哪一半都能取到）
+        // 2. 投影容器里已有的数量：所有选中的投影容器一起算，大箱子的内容记在规范那一半
         Map<ItemType, Integer> containerCount = new HashMap<>();
-        Inventory projectionInv = storageContainerCache.get(currentProjectionContainer);
-        if (projectionInv == null) {
-            BlockPos partner = getProjectionContainerPartner();
-            if (partner != null) {
-                projectionInv = storageContainerCache.get(partner);
+        for (BlockPos projection : projectionContainers) {
+            Inventory projectionInv = storageContainerCache.get(projection);
+            if (projectionInv == null) {
+                continue;
             }
-        }
-        if (projectionInv != null) {
+
             for (int i = 0; i < projectionInv.size(); i++) {
                 merge(containerCount, projectionInv.getStack(i), MAX_NESTING_DEPTH);
             }
@@ -394,10 +418,11 @@ public final class HighlightState {
         World world = MinecraftClient.getInstance().world;
         BlockState state = world != null ? world.getBlockState(immutablePos) : null;
 
-        // 投影来源（大箱子两半都算）只缓存内容用于扣减需求，不登记为仓储容器，
+        // 投影容器（大箱子两半都算）只缓存内容用于扣减需求，不登记为材料容器，
         // 否则手持触发物品时会在投影容器位置多画一个蓝框
-        if (isProjectionContainer(immutablePos)) {
-            cacheProjectionContents(inv);
+        BlockPos projection = canonicalProjectionContainer(immutablePos);
+        if (projection != null) {
+            acceptProjectionContents(projection, inv);
             return;
         }
 
@@ -427,16 +452,6 @@ public final class HighlightState {
         }
 
         putStorageContainer(immutablePos, inv, state);
-    }
-
-    /**
-     * 投影容器的内容统一记在登记坐标下：大箱子开哪一半都只存一份，统计时也不会算两遍。
-     */
-    private void cacheProjectionContents(Inventory inv) {
-        BlockPos canonical = currentProjectionContainer;
-        if (canonical != null && storageContainerCache.put(canonical, inv) != inv) {
-            markDirty();
-        }
     }
 
     /** 大箱子的另一半；不是大箱子、或对面不是箱子时返回 null。 */
@@ -529,15 +544,32 @@ public final class HighlightState {
         ContainerDataManager.get().ensureContents(immutablePos, state);
     }
 
-    /** 这一格的容器内容是否已经有缓存（不管来自哪条数据源）。 */
+    /** 这一格的容器内容是否已经有缓存（不管来自哪条数据源；投影容器按规范那半找）。 */
     public boolean hasContents(BlockPos pos) {
-        return pos != null && storageContainerCache.containsKey(pos.toImmutable());
+        if (pos == null) {
+            return false;
+        }
+
+        BlockPos projection = canonicalProjectionContainer(pos);
+        return storageContainerCache.containsKey(projection != null ? projection : pos.toImmutable());
+    }
+
+    /** 投影容器（世界那一格）的内容：只记"已经放进去多少"，不登记为材料容器。 */
+    public void acceptProjectionContents(BlockPos projection, Inventory inv) {
+        if (projection == null || inv == null) {
+            return;
+        }
+
+        if (storageContainerCache.put(projection, inv) != inv) {
+            markDirty();
+        }
     }
 
     /**
      * 数据源直接读到的某一格容器内容：写进缓存并登记。
      * <p>
      * 大箱子两半是各自的方块实体、各读各的，两半都拿到以后在这里配上对，让它们合成一个整箱框。
+     * 投影容器走 {@link #acceptProjectionContents}：只缓存内容，不登记成材料容器。
      */
     public void acceptStorageContents(BlockPos pos, BlockState state, Inventory inv) {
         if (pos == null || inv == null) {
@@ -545,6 +577,13 @@ public final class HighlightState {
         }
 
         BlockPos immutablePos = pos.toImmutable();
+
+        BlockPos projection = canonicalProjectionContainer(immutablePos);
+        if (projection != null) {
+            acceptProjectionContents(projection, inv);
+            return;
+        }
+
         putStorageContainer(immutablePos, inv, state);
 
         BlockPos partner = findChestPartner(MinecraftClient.getInstance().world, immutablePos, state);
@@ -646,65 +685,143 @@ public final class HighlightState {
         return changed;
     }
 
+    // ---------- 投影容器（多选） ----------
+
     /**
-     * 取消投影来源。
+     * 加入一个投影容器。
+     * <p>
+     * 大箱子只记规范那一半：点另一半、或点已在集合里的箱子，都不会重复加入，
+     * 否则同一箱内容会被算两遍需求。
      *
-     * @return 是否真的取消了投影（本来就没有投影时返回 false）
+     * @param replace true = 单选模式，先把已有选择清掉
+     * @return 是否成功（蓝图里那格不是容器、或读不出内容时返回 false）
      */
-    public boolean removeProjectContainer() {
-        if (currentProjectionContainer == null) {
+    public boolean addProjectionContainer(BlockPos pos, boolean replace) {
+        if (pos == null) {
             return false;
         }
 
-        // 投影区的箱子不能同时是材料容器：取消投影时顺手清掉同一格（大箱子两半都算）
-        // 可能残留的材料标记，免得原地留下蓝框
-        removeStorageContainer(currentProjectionContainer);
-
-        BlockPos partner = getProjectionContainerPartner();
-        if (partner != null) {
-            removeStorageContainer(partner);
-        }
-
-        currentProjectionContainer = null;
-        currentMissingItems.clear();
-        projectionMissing.clear();
-        markDirty();
-        return true;
-    }
-
-    // ---------- 投影容器 ----------
-
-    public boolean setCurrentProjectionContainer(BlockPos newPos) {
-        if (newPos == null) {
-            return false;
-        }
-
-        BlockPos immutableNewPos = newPos.toImmutable();
+        BlockPos immutablePos = pos.toImmutable();
         World world = MinecraftClient.getInstance().world;
         if (world == null) {
             return false;
         }
 
+        // 已经在选中的箱子里（含大箱子另一半）就当作已选
+        if (canonicalProjectionContainer(immutablePos) != null) {
+            return true;
+        }
+
         // 投影内容取自蓝图，世界方块只用于确定容器类型
-        BlockState state = world.getBlockState(immutableNewPos);
-        Optional<SimpleInventory> schematicInv = PlacementContainerAccess.getSchematicInventory(immutableNewPos, state);
+        BlockState state = world.getBlockState(immutablePos);
+        Optional<SimpleInventory> schematicInv = PlacementContainerAccess.getSchematicInventory(immutablePos, state);
         if (schematicInv.isEmpty() || isInventoryEmpty(schematicInv.get())) {
             return false;
         }
 
-        currentProjectionContainer = immutableNewPos;
+        if (replace) {
+            clearProjectionContainers();
+        }
 
-        currentMissingItems.clear();
-        Inventory inventory = schematicInv.get();
-        for (int i = 0; i < inventory.size(); i++) {
-            ItemStack stack = inventory.getStack(i);
-            if (!stack.isEmpty()) {
-                currentMissingItems.add(stack.copy());
+        projectionContainers.add(immutablePos);
+
+        // 记下大箱子另一半，渲染要合成整箱框、"任意一半都算投影容器"也要靠它
+        BlockPos partner = findChestPartner(world, immutablePos, state);
+        if (partner != null) {
+            projectionPartners.put(immutablePos, partner);
+        }
+
+        rebuildProjectionRequirements();
+        markDirty();
+
+        // 世界那格的内容也顺手取一次（数据源可用时），用于算"已经放进去多少"
+        ContainerDataManager.get().ensureContents(immutablePos, state);
+        return true;
+    }
+
+    /** 切换一个投影容器：已选就取消、没选就加入。多选模式用。 */
+    public boolean toggleProjectionContainer(BlockPos pos) {
+        BlockPos canonical = canonicalProjectionContainer(pos);
+        if (canonical != null) {
+            return removeProjectionContainer(canonical);
+        }
+
+        return addProjectionContainer(pos, false);
+    }
+
+    /**
+     * 取消一个投影容器（大箱子的任意一半都指向同一个）。
+     *
+     * @return 是否真的取消了（本来就没选中时返回 false）
+     */
+    public boolean removeProjectionContainer(BlockPos pos) {
+        BlockPos canonical = canonicalProjectionContainer(pos);
+        if (canonical == null) {
+            return false;
+        }
+
+        projectionContainers.remove(canonical);
+        BlockPos partner = projectionPartners.remove(canonical);
+
+        // 投影区的箱子不能同时是材料容器：取消投影时顺手清掉同一格（大箱子两半都算）
+        // 可能残留的材料标记，免得原地留下蓝框
+        removeStorageContainer(canonical);
+        if (partner != null) {
+            removeStorageContainer(partner);
+        }
+
+        rebuildProjectionRequirements();
+        projectionMissing.clear();
+        markDirty();
+        return true;
+    }
+
+    /** 清空全部投影选择。 */
+    public void clearProjectionContainers() {
+        if (projectionContainers.isEmpty()) {
+            return;
+        }
+
+        for (BlockPos projection : projectionContainers) {
+            removeStorageContainer(projection);
+
+            BlockPos partner = projectionPartners.get(projection);
+            if (partner != null) {
+                removeStorageContainer(partner);
             }
         }
 
+        projectionContainers.clear();
+        projectionPartners.clear();
+        rebuildProjectionRequirements();
+        projectionMissing.clear();
         markDirty();
-        return true;
+    }
+
+    /** 按当前选中的投影容器重建需求清单（各投影容器的蓝图内容拼在一起）。 */
+    private void rebuildProjectionRequirements() {
+        currentMissingItems.clear();
+
+        World world = MinecraftClient.getInstance().world;
+        if (world == null) {
+            return;
+        }
+
+        for (BlockPos projection : projectionContainers) {
+            Optional<SimpleInventory> schematicInv =
+                    PlacementContainerAccess.getSchematicInventory(projection, world.getBlockState(projection));
+            if (schematicInv.isEmpty()) {
+                continue;
+            }
+
+            Inventory inventory = schematicInv.get();
+            for (int i = 0; i < inventory.size(); i++) {
+                ItemStack stack = inventory.getStack(i);
+                if (!stack.isEmpty()) {
+                    currentMissingItems.add(stack.copy());
+                }
+            }
+        }
     }
 
     private boolean isInventoryEmpty(Inventory inventory) {
@@ -720,7 +837,7 @@ public final class HighlightState {
      * 该仓储箱已能满足投影需求时，从仓储名单中移除。
      */
     public void checkAndRemoveSatisfiedContainer(BlockPos storagePos) {
-        if (storagePos == null || currentProjectionContainer == null || currentMissingItems.isEmpty()) {
+        if (storagePos == null || projectionContainers.isEmpty() || currentMissingItems.isEmpty()) {
             return;
         }
 
@@ -764,7 +881,8 @@ public final class HighlightState {
         remainingNeeded.clear();
         projectionMissing.clear();
         currentMissingItems.clear();
-        currentProjectionContainer = null;
+        projectionContainers.clear();
+        projectionPartners.clear();
         tempProcessingPos = null;
         dirty = false;
         ContainerDataManager.get().reset();

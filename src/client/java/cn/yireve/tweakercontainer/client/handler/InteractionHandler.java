@@ -43,9 +43,9 @@ public final class InteractionHandler {
             // 投影来源（大箱子的另一半也算），以及投影里同样有容器的位置：取消整个投影。
             // 没有登记着投影时这一支不成立，也就不会有任何提示
             boolean projectionSide = state.isProjectionContainer(pos)
-                    || (state.getCurrentProjectionContainer() != null
+                    || (!state.getProjectionContainers().isEmpty()
                         && PlacementContainerAccess.isSchematicContainer(pos, world.getBlockState(pos)));
-            if (projectionSide && state.removeProjectContainer()) {
+            if (projectionSide && state.removeProjectionContainer(pos)) {
                 player.sendMessage(Text.translatable("tweakercontainer.message.removed_schem",
                         pos.getX(), pos.getY(), pos.getZ()), true);
                 return SUPPRESSED_RESULT;

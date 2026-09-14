@@ -14,6 +14,7 @@ import fi.dy.masa.malilib.config.options.ConfigInteger;
 import fi.dy.masa.malilib.config.options.ConfigOptionList;
 import fi.dy.masa.malilib.config.options.ConfigString;
 import cn.yireve.tweakercontainer.client.data.ContainerSource;
+import cn.yireve.tweakercontainer.client.data.ProjectionSelectionMode;
 import cn.yireve.tweakercontainer.client.data.ServuxTweaksChannel;
 import fi.dy.masa.malilib.util.FileUtils;
 import fi.dy.masa.malilib.util.JsonUtils;
@@ -94,6 +95,9 @@ public class HighlightConfig implements IConfigHandler {
                 .apply(GENERIC_TRANSLATION_PREFIX);
         public static final ConfigBoolean ALWAYS_SHOW_PROJECTION = new ConfigBoolean("alwaysShowProjection", false)
                 .apply(GENERIC_TRANSLATION_PREFIX);
+        public static final ConfigOptionList PROJECTION_SELECTION_MODE =
+                new ConfigOptionList("projectionSelectionMode", ProjectionSelectionMode.SINGLE)
+                        .apply(GENERIC_TRANSLATION_PREFIX);
 
         public static final List<IConfigBase> OPTIONS = List.of(
                 ENABLED,
@@ -102,6 +106,7 @@ public class HighlightConfig implements IConfigHandler {
                 SUPPRESS_CONTAINER_OPENING,
                 SUPPRESS_PROJECTION_OPENING,
                 ALWAYS_SHOW_PROJECTION,
+                PROJECTION_SELECTION_MODE,
                 CONTAINER_SOURCE,
                 CONTAINER_REFRESH_INTERVAL,
                 CONTAINER_REFRESH_BATCH_SIZE,
@@ -189,6 +194,13 @@ public class HighlightConfig implements IConfigHandler {
     /** 不手持触发物品时也显示投影容器的绿框。 */
     public static boolean isAlwaysShowProjection() {
         return Generic.ALWAYS_SHOW_PROJECTION.getBooleanValue();
+    }
+
+    /** 投影容器的选取方式：单选 / 多选 / 角点。 */
+    public static ProjectionSelectionMode getProjectionSelectionMode() {
+        return Generic.PROJECTION_SELECTION_MODE.getOptionListValue() instanceof ProjectionSelectionMode mode
+                ? mode
+                : ProjectionSelectionMode.SINGLE;
     }
 
     /** 容器内容的数据源；具体走哪条由 {@code ContainerDataManager} 结合实际环境解析。 */

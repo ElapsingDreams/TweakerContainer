@@ -97,21 +97,19 @@ public final class BlockHighlighterRender {
         }
     }
 
-    /** 画投影容器（大箱子时框整个箱子）。 */
+    /** 画投影容器（多选，逐个画；大箱子合成整箱框）。 */
     private static void renderProjectionContainer(HighlightState state, Vec3d cameraPos, boolean throughWalls) {
-        BlockPos projectionContainer = state.getCurrentProjectionContainer();
-        if (projectionContainer == null) {
-            return;
-        }
-
         Color4f projectionColor = HighlightConfig.getProjectionContainerColor();
-        BlockPos projectionPartner = state.getProjectionContainerPartner();
 
-        if (projectionPartner != null) {
-            // 两半之间共用的那条棱不画
-            renderChestOutline(cameraPos, projectionContainer, projectionPartner, projectionColor, throughWalls);
-        } else {
-            renderOutline(cameraPos, projectionContainer, projectionColor, throughWalls);
+        for (BlockPos projection : state.getProjectionContainers()) {
+            BlockPos projectionPartner = state.getProjectionContainerPartner(projection);
+
+            if (projectionPartner != null) {
+                // 两半之间共用的那条棱不画
+                renderChestOutline(cameraPos, projection, projectionPartner, projectionColor, throughWalls);
+            } else {
+                renderOutline(cameraPos, projection, projectionColor, throughWalls);
+            }
         }
     }
 
