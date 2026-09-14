@@ -61,8 +61,9 @@ public final class InteractionHandler {
             }
         }
 
-        // 右键容器：登记为投影/仓储容器并记录本次处理坐标
-        if (handleContainerClick(player, hitResult) && shouldKeepContainerClosed(hitResult.getBlockPos())) {
+        // 右键容器：登记为投影/仓储容器并记录本次处理坐标（空手也算，界面提示要用）
+        if (handleContainerClick(player, hitResult) && isHoldingTriggerItem()
+                && shouldKeepContainerClosed(hitResult.getBlockPos())) {
             // 内容已经能从服务端拿到（内置服务端 / Servux / 原版查询），就不打开界面了。
             // 注意把待抓取坐标清掉：界面不会开，留着会被下一个界面（比如背包）误当成容器去抓
             state.setTempProcessingPos(null);
@@ -106,20 +107,25 @@ public final class InteractionHandler {
      * {@link UseBlockCallback} 与 {@code ClientPlayerInteractionManagerMixin} 都会调到这里，
      * 早先两处各写一套，结果潜行右键被其中一处当成登记，弹出了莫名其妙的清除提示。
      * <p>
-     * 必须手持触发物品：否则空手右键也会被登记（甚至被"不打开容器"吃掉右键），
-     * 还会顺手跑一遍"材料够了自动撤标记"，把玩家没打算动的东西改了。
+     * 登记本身不管手不手持触发物品都做：空手开箱子也是正常玩法，界面里的格子提示要靠这次登记
+     * 记下"当前容器"。真正会改动玩家东西的两件事——"材料够了自动撤标记"和"吃掉右键不打开界面"——
+     * 才只该在手持触发物品时发生。
      *
      * @return 是否登记成功
      */
     public static boolean handleContainerClick(PlayerEntity player, BlockHitResult hitResult) {
-        if (player == null || player.isSneaking() || !isEnabled() || !isHoldingTriggerItem()
-                || !InventoryOverlay.onContainerClick(hitResult)) {
+        if (player == null || player.isSneaking() || !isEnabled() || !InventoryOverlay.onContainerClick(hitResult)) {
             return false;
         }
 
         HighlightState state = HighlightState.get();
         state.setTempProcessingPos(hitResult.getBlockPos());
-        state.checkAndRemoveSatisfiedContainer(hitResult.getBlockPos());
+
+        // 空手右键只是开箱子，不该顺手把标记撤掉
+        if (isHoldingTriggerItem()) {
+            state.checkAndRemoveSatisfiedContainer(hitResult.getBlockPos());
+        }
+
         return true;
     }
 }
