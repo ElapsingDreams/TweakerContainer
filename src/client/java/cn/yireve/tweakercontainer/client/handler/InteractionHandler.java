@@ -105,11 +105,15 @@ public final class InteractionHandler {
      * <p>
      * {@link UseBlockCallback} 与 {@code ClientPlayerInteractionManagerMixin} 都会调到这里，
      * 早先两处各写一套，结果潜行右键被其中一处当成登记，弹出了莫名其妙的清除提示。
+     * <p>
+     * 必须手持触发物品：否则空手右键也会被登记（甚至被"不打开容器"吃掉右键），
+     * 还会顺手跑一遍"材料够了自动撤标记"，把玩家没打算动的东西改了。
      *
      * @return 是否登记成功
      */
     public static boolean handleContainerClick(PlayerEntity player, BlockHitResult hitResult) {
-        if (player == null || player.isSneaking() || !isEnabled() || !InventoryOverlay.onContainerClick(hitResult)) {
+        if (player == null || player.isSneaking() || !isEnabled() || !isHoldingTriggerItem()
+                || !InventoryOverlay.onContainerClick(hitResult)) {
             return false;
         }
 
