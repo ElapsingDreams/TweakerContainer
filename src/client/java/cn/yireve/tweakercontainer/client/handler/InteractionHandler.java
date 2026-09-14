@@ -76,7 +76,7 @@ public final class InteractionHandler {
      * 这次右键要不要拦下、不打开容器。
      * <p>
      * 只有"确实还能从别处拿到内容"时才拦：数据源退化成只能用开界面抓取时，照旧让它打开。
-     * 投影来源不拦——那是往里放材料的地方，玩家要能开。
+     * 投影来源默认不拦（那是往里放材料的地方），想连它一起拦就把对应的配置打开。
      */
     private static boolean shouldKeepContainerClosed(BlockPos pos) {
         if (!HighlightConfig.isSuppressContainerOpening()) {
@@ -87,7 +87,7 @@ public final class InteractionHandler {
             return false;
         }
 
-        return !HighlightState.get().isProjectionContainer(pos);
+        return !HighlightState.get().isProjectionContainer(pos) || HighlightConfig.isSuppressProjectionOpening();
     }
 
     /**

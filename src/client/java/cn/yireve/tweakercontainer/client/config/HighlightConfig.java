@@ -90,12 +90,15 @@ public class HighlightConfig implements IConfigHandler {
 
         public static final ConfigBoolean SUPPRESS_CONTAINER_OPENING = new ConfigBoolean("suppressContainerOpening", true)
                 .apply(GENERIC_TRANSLATION_PREFIX);
+        public static final ConfigBoolean SUPPRESS_PROJECTION_OPENING = new ConfigBoolean("suppressProjectionOpening", false)
+                .apply(GENERIC_TRANSLATION_PREFIX);
 
         public static final List<IConfigBase> OPTIONS = List.of(
                 ENABLED,
                 TRIGGER_ITEM,
                 SEE_THROUGH,
                 SUPPRESS_CONTAINER_OPENING,
+                SUPPRESS_PROJECTION_OPENING,
                 CONTAINER_SOURCE,
                 CONTAINER_REFRESH_INTERVAL,
                 CONTAINER_REFRESH_BATCH_SIZE,
@@ -173,6 +176,11 @@ public class HighlightConfig implements IConfigHandler {
     /** 拿着触发物品右键容器时，能拿到数据就不打开界面。 */
     public static boolean isSuppressContainerOpening() {
         return Generic.SUPPRESS_CONTAINER_OPENING.getBooleanValue();
+    }
+
+    /** 投影来源（往里面放材料的那个容器）是否也一起拦下不打开。 */
+    public static boolean isSuppressProjectionOpening() {
+        return Generic.SUPPRESS_PROJECTION_OPENING.getBooleanValue();
     }
 
     /** 容器内容的数据源；具体走哪条由 {@code ContainerDataManager} 结合实际环境解析。 */
