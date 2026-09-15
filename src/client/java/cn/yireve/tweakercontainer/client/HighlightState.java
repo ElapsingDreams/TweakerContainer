@@ -2,9 +2,11 @@ package cn.yireve.tweakercontainer.client;
 
 import cn.yireve.tweakercontainer.client.config.HighlightConfig;
 import cn.yireve.tweakercontainer.client.data.ContainerDataManager;
+import cn.yireve.tweakercontainer.client.features.InventoryOverlay;
 import cn.yireve.tweakercontainer.client.features.PlacementContainerAccess;
 import fi.dy.masa.malilib.util.InventoryUtils;
 import fi.dy.masa.malilib.util.ItemType;
+import net.minecraft.block.BlockEntityProvider;
 import net.minecraft.block.BlockState;
 import net.minecraft.block.ChestBlock;
 import net.minecraft.block.enums.ChestType;
@@ -46,6 +48,8 @@ public final class HighlightState {
 
     private final Map<ItemType, Integer> remainingNeeded = new ConcurrentHashMap<>();
     private final Map<ItemType, Integer> projectionMissing = new ConcurrentHashMap<>();
+    // 当前打开的那个投影容器自己的缺口：打开某个投影容器时只看它，不然会把别的箱子要放的东西也标出来
+    private final Map<ItemType, Integer> openProjectionMissing = new ConcurrentHashMap<>();
     private final Map<BlockPos, Inventory> storageContainerCache = new ConcurrentHashMap<>();
     // 登记时的方块状态，用于复核这个位置是否还是原来那个容器
     private final Map<BlockPos, BlockState> storageContainerStates = new ConcurrentHashMap<>();
@@ -226,36 +230,121 @@ public final class HighlightState {
         return projectionCornerStart != null && projectionCornerEnd != null;
     }
 
-    /** 清掉选框（切换模式、断线时用）。 */
-    public void clearProjectionCorners() {
-        projectionCornerStart = null;
-        projectionCornerEnd = null;
+    /**
+     * 投影侧要看哪份需求。
+     * <p>
+     * 打开着某个投影容器时只看那个容器自己的缺口——多选时所有选中箱子的缺口是合在一起的，
+     * 直接拿合计去标会把"别的箱子要放的东西"也标在这个界面上，看着就像这箱子缺一堆它其实不缺的。
+     */
+    private Map<ItemType, Integer> projectionNeedSource() {
+        return canonicalProjectionContainer(InventoryOverlay.getCurrentContainerPos()) != null
+                ? openProjectionMissing
+                : projectionMissing;
     }
 
     /**
-     * 按当前两个角点框选：把框内"蓝图里也是容器"的位置整批加入投影集合。
+     * 重算"当前打开的投影容器"自己的缺口：它的蓝图内容减去它自己现在已经放进去的。
      * <p>
-     * 已经在集合里的（含大箱子另一半）会跳过，所以框选可以反复用、也可以和右键逐个选混着来。
-     *
-     * @return 本次新加入的数量
+     * 口径与单容器时期一致：不扣背包——背包里有多少不影响"这个箱子还该放进去多少"。
      */
-    public int selectProjectionContainersInBox() {
-        BlockPos start = projectionCornerStart;
-        BlockPos end = projectionCornerEnd;
-        if (start == null || end == null) {
-            return 0;
+    private void updateOpenProjectionMissing() {
+        openProjectionMissing.clear();
+
+        World world = MinecraftClient.getInstance().world;
+        BlockPos openProjection = canonicalProjectionContainer(InventoryOverlay.getCurrentContainerPos());
+        if (world == null || openProjection == null) {
+            return;
         }
 
-        int added = 0;
-        for (BlockPos pos : PlacementContainerAccess.findSchematicContainersInBox(start, end)) {
-            if (canonicalProjectionContainer(pos) != null) {
-                continue;
-            }
-            if (addProjectionContainer(pos, false)) {
-                added++;
+        Optional<SimpleInventory> schematicInv =
+                PlacementContainerAccess.getSchematicInventory(openProjection, world.getBlockState(openProjection));
+        if (schematicInv.isEmpty()) {
+            return;
+        }
+
+        Map<ItemType, Integer> required = new HashMap<>();
+        Inventory inventory = schematicInv.get();
+        for (int i = 0; i < inventory.size(); i++) {
+            merge(required, inventory.getStack(i), 0);
+        }
+
+        Map<ItemType, Integer> present = new HashMap<>();
+        Inventory cached = storageContainerCache.get(openProjection);
+        if (cached != null) {
+            for (int i = 0; i < cached.size(); i++) {
+                merge(present, cached.getStack(i), MAX_NESTING_DEPTH);
             }
         }
-        return added;
+
+        for (Map.Entry<ItemType, Integer> entry : required.entrySet()) {
+            int missing = entry.getValue() - present.getOrDefault(entry.getKey(), 0);
+            if (missing > 0) {
+                openProjectionMissing.put(entry.getKey(), missing);
+            }
+        }
+    }
+
+    /**
+     * 按当前两个角点框选：框内每一个容器，按和"逐个右键"完全一样的口径分流——
+     * 蓝图里也是容器的进投影集合，其余登记为材料容器。
+     *
+     * @return 本次新增的数量（投影 / 材料各多少）
+     */
+    public BoxSelection selectContainersInBox() {
+        BlockPos start = projectionCornerStart;
+        BlockPos end = projectionCornerEnd;
+        World world = MinecraftClient.getInstance().world;
+        if (start == null || end == null || world == null) {
+            return new BoxSelection(0, 0);
+        }
+
+        int minX = Math.min(start.getX(), end.getX());
+        int minY = Math.min(start.getY(), end.getY());
+        int minZ = Math.min(start.getZ(), end.getZ());
+        int maxX = Math.max(start.getX(), end.getX());
+        int maxY = Math.max(start.getY(), end.getY());
+        int maxZ = Math.max(start.getZ(), end.getZ());
+
+        int projections = 0;
+        int storages = 0;
+        BlockPos.Mutable cursor = new BlockPos.Mutable();
+
+        for (int y = minY; y <= maxY; y++) {
+            for (int z = minZ; z <= maxZ; z++) {
+                for (int x = minX; x <= maxX; x++) {
+                    cursor.set(x, y, z);
+
+                    // 先按方块状态便宜地筛一遍：不是方块实体就直接跳过，省掉后面取容器内容那套
+                    BlockState state = world.getBlockState(cursor);
+                    if (!(state.getBlock() instanceof BlockEntityProvider)
+                            || !InventoryOverlay.isContainer(world, cursor)) {
+                        continue;
+                    }
+
+                    BlockPos pos = cursor.toImmutable();
+                    if (PlacementContainerAccess.isSchematicContainer(pos, state)) {
+                        if (canonicalProjectionContainer(pos) == null && addProjectionContainer(pos, false)) {
+                            projections++;
+                        }
+                    } else if (!isStorageContainer(pos)) {
+                        addStorageContainer(pos, state);
+                        storages++;
+                    }
+                }
+            }
+        }
+
+        return new BoxSelection(projections, storages);
+    }
+
+    /** 框选结果：新增了多少个投影容器、多少个材料容器。 */
+    public record BoxSelection(int projections, int storages) {
+    }
+
+    /** 清掉选框（框选完成后、切换模式、断线时用）。 */
+    public void clearProjectionCorners() {
+        projectionCornerStart = null;
+        projectionCornerEnd = null;
     }
 
     // ---------- 槽位提示查询 ----------
@@ -284,7 +373,7 @@ public final class HighlightState {
             return null;
         }
 
-        Map<ItemType, Integer> source = projectionView ? projectionMissing : remainingNeeded;
+        Map<ItemType, Integer> source = projectionView ? projectionNeedSource() : remainingNeeded;
 
         ItemType self = keyOf(stack);
         Integer direct = source.get(self);
@@ -330,7 +419,7 @@ public final class HighlightState {
             return false;
         }
 
-        Map<ItemType, Integer> source = projectionView ? projectionMissing : remainingNeeded;
+        Map<ItemType, Integer> source = projectionView ? projectionNeedSource() : remainingNeeded;
         ItemType self = keyOf(stack);
         for (ItemType key : source.keySet()) {
             if (key.getStack().getItem() == stack.getItem() && !key.equals(self)) {
@@ -373,6 +462,7 @@ public final class HighlightState {
         matchingStorageContainers.clear();
         remainingNeeded.clear();
         projectionMissing.clear();
+        updateOpenProjectionMissing();
         if (projectionContainers.isEmpty() || currentMissingItems.isEmpty()) {
             return;
         }

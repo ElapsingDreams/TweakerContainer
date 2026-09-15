@@ -81,12 +81,17 @@ public final class InteractionHandler {
             }
         }
 
-        // 角点模式右键：记下选框终点，然后把框内蓝图里是容器的位置整批选上。
+        // 角点模式右键：记下选框终点，然后把框内每一个容器按和逐个右键一样的口径分流。
         // 潜行右键留给"清除标记"，不参与框选
         if (!player.isSneaking() && hitResult.getType() == BlockHitResult.Type.BLOCK && isCornerSelecting()) {
             state.setProjectionCorner(hitResult.getBlockPos(), false);
-            int added = state.selectProjectionContainersInBox();
-            player.sendMessage(Text.translatable("tweakercontainer.message.corner_selected", added), true);
+            HighlightState.BoxSelection selected = state.selectContainersInBox();
+
+            // 框完就把选框收掉：留着会和刚框出来的那些框叠在一起，分不清哪个是选框
+            state.clearProjectionCorners();
+
+            player.sendMessage(Text.translatable("tweakercontainer.message.corner_selected",
+                    selected.projections(), selected.storages()), true);
             return SUPPRESSED_RESULT;
         }
 

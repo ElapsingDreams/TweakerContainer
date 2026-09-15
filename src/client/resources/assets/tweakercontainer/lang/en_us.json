@@ -16,7 +16,7 @@
   "tweakercontainer.config.generic.name.alwaysShowProjection": "Always Show The Projection Outline",
   "tweakercontainer.config.generic.comment.alwaysShowProjection": "Draw the projection container's outline even when the trigger item is not held; off by default, so the outline only shows while holding the trigger item",
   "tweakercontainer.config.generic.name.projectionSelectionMode": "Projection Selection Mode",
-  "tweakercontainer.config.generic.comment.projectionSelectionMode": "SINGLE: right-clicking a container replaces the previous pick. MULTI: right-click adds one, right-click again removes it. CORNER: with the trigger item held, left-click one corner and right-click the other; every position inside the box whose schematic block is a container gets selected",
+  "tweakercontainer.config.generic.comment.projectionSelectionMode": "SINGLE: right-clicking a container replaces the previous pick. MULTI: right-click adds one, right-click again removes it. CORNER: with the trigger item held, left-click one corner and right-click the other; every container inside the box is handled exactly like a right-click would (ones that are containers in the schematic go to the projection set, the rest are registered as material containers), and the box clears itself afterwards",
   "tweakercontainer.config.projectionSelectionMode.single": "Single",
   "tweakercontainer.config.projectionSelectionMode.multi": "Multi",
   "tweakercontainer.config.projectionSelectionMode.corner": "Corner Box",
@@ -70,5 +70,5 @@
 
   "tweakercontainer.message.removed_schem": "Removed the projection container record",
   "tweakercontainer.message.removed_storage": "Removed the material container record",
-  "tweakercontainer.message.corner_selected": "Box-selected projection containers: %s added"
+  "tweakercontainer.message.corner_selected": "Box selection done: %s projection container(s), %s material container(s) added"
 }

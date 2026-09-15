@@ -3,8 +3,6 @@ package cn.yireve.tweakercontainer.client.features;
 import cn.yireve.tweakercontainer.client.utils.ContainerUtils;
 
 import cn.yireve.tweakercontainer.client.utils.LocalPlacementPos;
-import fi.dy.masa.litematica.data.DataManager;
-import fi.dy.masa.litematica.schematic.placement.SchematicPlacement;
 import net.minecraft.block.BlockState;
 import net.minecraft.block.ChestBlock;
 import net.minecraft.block.entity.BlockEntity;
@@ -18,12 +16,8 @@ import net.minecraft.util.math.BlockPos;
 import net.minecraft.world.World;
 import org.jetbrains.annotations.Nullable;
 
-import java.util.ArrayList;
-import java.util.LinkedHashSet;
-import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.Set;
 
 /**
  * Used to access container data inside a placement.
@@ -80,63 +74,6 @@ public final class PlacementContainerAccess {
         }
         BlockPos adjacentChest = worldPos.add(ChestBlock.getFacing(worldState).getVector());
         return matchSchematicContainer(adjacentChest, world.getBlockState(adjacentChest)) != null;
-    }
-
-    /**
-     * 找出选框内"蓝图里也是容器"的所有世界坐标，按角点框选加入投影集合用。
-     * <p>
-     * 不逐格扫描方块：直接遍历所有已放置投影的（已启用）子区域方块实体表，只对容器位置做坐标变换。
-     * 取舍与右键登记一致——蓝图里内容为空的箱子本来就没有需求、右键也登记不上，这里同样不列出来；
-     * 世界那格还不是配套容器（没建出来、区块没加载、被换成别的方块）的位置也会跳过。
-     *
-     * @return 世界坐标列表；没有任何命中时返回空表
-     */
-    public static List<BlockPos> findSchematicContainersInBox(BlockPos cornerA, BlockPos cornerB) {
-        World world = MinecraftClient.getInstance().world;
-        if (world == null || cornerA == null || cornerB == null) {
-            return List.of();
-        }
-
-        int minX = Math.min(cornerA.getX(), cornerB.getX());
-        int minY = Math.min(cornerA.getY(), cornerB.getY());
-        int minZ = Math.min(cornerA.getZ(), cornerB.getZ());
-        int maxX = Math.max(cornerA.getX(), cornerB.getX());
-        int maxY = Math.max(cornerA.getY(), cornerB.getY());
-        int maxZ = Math.max(cornerA.getZ(), cornerB.getZ());
-
-        // 同一个世界坐标可能被多个投影/子区域覆盖，去重后再逐个复核世界方块
-        Set<BlockPos> candidates = new LinkedHashSet<>();
-
-        for (SchematicPlacement placement : DataManager.getSchematicPlacementManager().getAllSchematicsPlacements()) {
-            if (!placement.isEnabled()) {
-                continue;
-            }
-
-            for (String region : placement.getEnabledRelativeSubRegionPlacements().keySet()) {
-                Map<BlockPos, NbtCompound> blockEntities = placement.getSchematic().getBlockEntityMapForRegion(region);
-                if (blockEntities == null || blockEntities.isEmpty()) {
-                    continue;
-                }
-
-                for (BlockPos schematicPos : blockEntities.keySet()) {
-                    BlockPos worldPos = LocalPlacementPos.getWorldPos(schematicPos, region, placement);
-                    if (worldPos.getX() < minX || worldPos.getX() > maxX
-                            || worldPos.getY() < minY || worldPos.getY() > maxY
-                            || worldPos.getZ() < minZ || worldPos.getZ() > maxZ) {
-                        continue;
-                    }
-                    candidates.add(worldPos);
-                }
-            }
-        }
-
-        List<BlockPos> result = new ArrayList<>();
-        for (BlockPos worldPos : candidates) {
-            if (isSchematicContainer(worldPos, world.getBlockState(worldPos))) {
-                result.add(worldPos);
-            }
-        }
-        return result;
     }
 
     /**
