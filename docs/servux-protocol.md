@@ -105,3 +105,18 @@ Fabric 的载荷注册表（`PayloadTypeRegistry`）按通道 id 只存**一份*
   `CustomPayloadS2CPacket` 的构造器上挂钩子读一份（`client/mixins/CustomPayloadS2CPacketMixin`）
 - 发包前先确认它的 codec 真的注册上了（Fabric 没有公开查询接口，只能问 `PayloadTypeRegistryImpl#get(Identifier)`）；
   确认不了就整条通道作废，退回开界面抓取——宁可少一个数据源，也不能发一个编码不了的包把连接打断
+
+## 8. 另一个连坐：litematica 的实体数据请求会被"顺手"触发
+
+`fi.dy.masa.litematica.util.InventoryUtils#getTargetInventory(World, BlockPos)` 在**客户端分支**里会调用
+`EntitiesDataStorage.getInstance().requestBlockEntity(world, pos)`：缓存里没有这格的数据时，它会去服务端要，
+并把该格排进自己的 `pendingBlockEntitiesQueue` / `blockEntityCache`。
+
+所以任何模组只要"在客户端对世界方块判一下是不是容器"，就会替 litematica 向服务端发一批请求。
+本项目曾经用它来判断"这格是不是容器"（`ContainerUtils.validateContainer`），平时几个格子看不出问题，
+**框选**一次要把选框里每个容器都判一遍 → 成批触发 litematica 的请求 → 它自己的账本对不上 →
+`tickCache` 里 `blockEntityCache.get(pos).getLeft()` 拿到 null → NPE 崩游戏
+（`EntitiesDataStorage.java:359`；0.23.4 与 0.23.7 那行都没有判空）。
+
+⇒ 判断容器只读客户端世界自己的方块实体（`world.getBlockEntity(pos)`），或干脆用方块状态造一个占位方块实体；
+**不要**碰 litematica 那个入口。这条和"原版查询"那件事是同一个道理：会替别的模组发我们收不到回包的请求。
