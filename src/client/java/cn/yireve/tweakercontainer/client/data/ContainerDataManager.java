@@ -25,6 +25,7 @@ import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.Vec3d;
 import net.minecraft.world.World;
 import net.minecraft.world.chunk.WorldChunk;
+import org.jetbrains.annotations.Nullable;
 import org.slf4j.Logger;
 
 import java.util.ArrayDeque;
@@ -42,11 +43,13 @@ import java.util.concurrent.ConcurrentHashMap;
  *       不需要任何其它模组——客户端世界只有开界面时才会被同步，服务端手里才有真数据。
  *       读不到（区块没加载、方块实体还没同步等）会自动退到服务端查询，单人主机有权限，一定问得到。</li>
  *   <li><b>服务端查询</b>：先走 Servux 自定义通道，再退原版 {@code QueryBlockNbtC2SPacket}
- *       （{@link DataQueryHandler#queryBlockNbt}）。原版服务端对权限不足的查询是静默忽略、不会踢人，
+ *       （{@link VanillaQueryChannel}，没有用原版那个只有一格回调槽的 {@link DataQueryHandler}，
+ *       原因见那边的类注释）。原版服务端对权限不足的查询是静默忽略、不会踢人，
  *       所以可以放心试探：连续几次没回包就把这个服务器标记为不支持，退回开界面抓取。</li>
  *   <li><b>开界面抓取</b>：{@link HighlightState#cacheStorageInventory} 那条老链路，任何服务器都能用，作为回退。</li>
  * </ol>
- * 原版 {@link DataQueryHandler} 一次只挂一个回调，所以这里的查询严格串行：同一时刻只有一个在飞，其余排队。
+ * 查询严格串行：同一时刻只有一个在飞，其余排队（原版那个入口只有一格回调槽，被别的模组顶掉的滋味
+ * 我们在 litematica 那边已经见识过了，见 {@link VanillaQueryChannel}）。
  * <p>
  * 另外按配置的间隔（{@code containerRefreshInterval}）定时重取玩家附近已登记的容器，
  * 应对"内容被别的玩家改动"。
@@ -383,11 +386,16 @@ public final class ContainerDataManager {
 
         this.inFlight = pos;
         this.inFlightSince = System.currentTimeMillis();
-        handler.getDataQueryHandler().queryBlockNbt(pos, nbt -> this.onQueryResponse(pos, nbt));
+
+        // 自己发包收包，不碰原版那个只有一格的回调槽（详见 VanillaQueryChannel 的类注释）
+        if (!VanillaQueryChannel.get().send(pos)) {
+            this.inFlight = null;
+            this.failAllQueries();
+        }
     }
 
-    private void onQueryResponse(BlockPos pos, NbtCompound nbt) {
-        // 不是我们等的那次（回调可能被别的模组顶掉），忽略
+    void onQueryResponse(BlockPos pos, @Nullable NbtCompound nbt) {
+        // 不是我们等的那次，忽略
         if (!pos.equals(this.inFlight)) {
             return;
         }

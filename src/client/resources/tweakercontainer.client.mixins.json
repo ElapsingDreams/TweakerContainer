@@ -11,6 +11,7 @@
   },
   "client": [
     "HandledScreenMixin",
-    "CustomPayloadS2CPacketMixin"
+    "CustomPayloadS2CPacketMixin",
+    "NbtQueryResponseS2CPacketMixin"
   ]
 }
