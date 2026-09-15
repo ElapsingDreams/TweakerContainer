@@ -10,7 +10,7 @@
   "tweakercontainer.config.generic.name.seeThrough": "穿透显示",
   "tweakercontainer.config.generic.comment.seeThrough": "线框穿透方块显示",
   "tweakercontainer.config.generic.name.suppressContainerOpening": "拿到数据就不打开容器",
-  "tweakercontainer.config.generic.comment.suppressContainerOpening": "手持触发物品右键容器时，只要内容能从服务端取到（单机/局域网走内置服务端，联机走 Servux 或原版查询）就不打开界面",
+  "tweakercontainer.config.generic.comment.suppressContainerOpening": "手持触发物品右键容器时，只要内容能从服务端取到（单机/局域网走内置服务端，联机走 Servux 通道）就不打开界面",
   "tweakercontainer.config.generic.name.suppressProjectionOpening": "投影容器也不打开",
   "tweakercontainer.config.generic.comment.suppressProjectionOpening": "投影来源（往里面放材料的那个容器）默认照旧打开，方便放材料；打开这一项就连它也一起拦下",
   "tweakercontainer.config.generic.name.alwaysShowProjection": "常显投影绿框",

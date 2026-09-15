@@ -60,6 +60,15 @@
 - Servux 的 `MixinServerPlayNetworkHandler_QueryNbt.servux_onQueryBlockNbt(int level)`：当 `EntitiesDataProvider.hasNbtQueryOverride()` 且 `hasNbtQueryPermission(player)` 时把等级改成 0
 - ⚠️ **`EntitiesDataProvider` 构造里 `nbt_query_override` 的默认值是 false**（`ServuxBoolSetting("nbt_query_override", …, iconst_0, …)`），
   所以"原版查询"默认在 Servux 服上**用不了**，非 OP 玩家要靠上面的自定义通道
+- ⚠️ **本项目不用这条路**（2026-09 实测踩过）：litematica 的 `mixin/network/MixinClientPlayNetworkHandler` 里有个
+  `litematica_onQueryResponse(NbtQueryResponseS2CPacket)`，会把客户端收到的**每一个**查询回包交给
+  `EntitiesDataStorage.handleVanillaQueryNbt(txId, nbt)`；那个方法第一件事是
+  「如果 `checkOpStatus` 还立着就把 `hasOpStatus` 记成有权限」——**它分不清这条回包是谁发的**。
+  于是别的模组（我们）发的查询一回包，就可能让它误判自己有查询权限，接着它拿非 OP 的身份去发自己的查询，
+  那些请求被服务端静默忽略，它自己的 `transactionToBlockPosOrEntityId` / `pendingBlockEntitiesQueue` /
+  `blockEntityCache` 就对不上，之后 `tickCache` 里 `blockEntityCache.get(pos).getLeft()` 拿到 null 直接 NPE 崩游戏
+  （0.23.4 的 `EntitiesDataStorage.java:359`；**0.23.7 那行仍然没有判空**）。
+  ⇒ 只要客户端装了 litematica，就不要再往这条路上发任何查询包；本项目只保留 Servux 通道与开界面抓取
 
 ## 5. 复用到的 malilib 设施
 
@@ -95,4 +104,4 @@ Fabric 的载荷注册表（`PayloadTypeRegistry`）按通道 id 只存**一份*
   那个位置必须留给 tweakeroo，否则它收不到自己的回包；所以我们在
   `CustomPayloadS2CPacket` 的构造器上挂钩子读一份（`client/mixins/CustomPayloadS2CPacketMixin`）
 - 发包前先确认它的 codec 真的注册上了（Fabric 没有公开查询接口，只能问 `PayloadTypeRegistryImpl#get(Identifier)`）；
-  确认不了就整条通道作废，退回原版查询 / 开界面抓取——宁可少一个数据源，也不能发一个编码不了的包把连接打断
+  确认不了就整条通道作废，退回开界面抓取——宁可少一个数据源，也不能发一个编码不了的包把连接打断

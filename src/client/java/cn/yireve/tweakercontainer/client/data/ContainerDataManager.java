@@ -11,8 +11,6 @@ import net.minecraft.block.ChestBlock;
 import net.minecraft.block.entity.BlockEntity;
 import net.minecraft.block.enums.ChestType;
 import net.minecraft.client.MinecraftClient;
-import net.minecraft.client.network.ClientPlayNetworkHandler;
-import net.minecraft.client.network.DataQueryHandler;
 import net.minecraft.client.world.ClientWorld;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.inventory.Inventory;
@@ -25,13 +23,10 @@ import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.Vec3d;
 import net.minecraft.world.World;
 import net.minecraft.world.chunk.WorldChunk;
-import org.jetbrains.annotations.Nullable;
 import org.slf4j.Logger;
 
-import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Comparator;
-import java.util.Deque;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -42,14 +37,18 @@ import java.util.concurrent.ConcurrentHashMap;
  *   <li><b>内置服务端直读</b>：本地世界（单人、局域网主机）直接读内置服务端的方块实体。
  *       不需要任何其它模组——客户端世界只有开界面时才会被同步，服务端手里才有真数据。
  *       读不到（区块没加载、方块实体还没同步等）会自动退到服务端查询，单人主机有权限，一定问得到。</li>
- *   <li><b>服务端查询</b>：先走 Servux 自定义通道，再退原版 {@code QueryBlockNbtC2SPacket}
- *       （{@link VanillaQueryChannel}，没有用原版那个只有一格回调槽的 {@link DataQueryHandler}，
- *       原因见那边的类注释）。原版服务端对权限不足的查询是静默忽略、不会踢人，
- *       所以可以放心试探：连续几次没回包就把这个服务器标记为不支持，退回开界面抓取。</li>
+ *   <li><b>服务端查询</b>：走 Servux 自定义通道（{@link ServuxTweaksChannel}）。</li>
  *   <li><b>开界面抓取</b>：{@link HighlightState#cacheStorageInventory} 那条老链路，任何服务器都能用，作为回退。</li>
  * </ol>
- * 查询严格串行：同一时刻只有一个在飞，其余排队（原版那个入口只有一格回调槽，被别的模组顶掉的滋味
- * 我们在 litematica 那边已经见识过了，见 {@link VanillaQueryChannel}）。
+ * <p>
+ * <b>这里刻意不用原版 NBT 查询（{@code QueryBlockNbtC2SPacket}）</b>，虽然那条路在"服务端放行查询"时能用：
+ * litematica 的 {@code MixinClientPlayNetworkHandler} 会把客户端收到的<b>每一个</b>
+ * {@code NbtQueryResponseS2CPacket} 都交给 {@code EntitiesDataStorage.handleVanillaQueryNbt}，
+ * 而那个方法第一件事就是"只要探针还立着，就把权限状态记成有"——它分不清这条回包是谁发的（字节码核对过）。
+ * 我们自己的查询一回包就可能让它误以为有查询权限，接着它拿非 OP 的身份去发自己的查询，
+ * 那些请求被服务端静默忽略，它自己的待办表/缓存就对不上，随后 {@code tickCache} 里 NPE 崩游戏
+ * （0.23.4 与 0.23.7 那行都没有判空）。litematica 是本模组的硬依赖，这条路等于永远在别人的地盘上乱踩，
+ * 而 Servux 通道 + 开界面抓取已经够用，所以整条去掉。
  * <p>
  * 另外按配置的间隔（{@code containerRefreshInterval}）定时重取玩家附近已登记的容器，
  * 应对"内容被别的玩家改动"。
@@ -58,10 +57,6 @@ public final class ContainerDataManager {
     private static final Logger LOGGER = LogUtils.getLogger();
     private static final ContainerDataManager INSTANCE = new ContainerDataManager();
 
-    /** 单次查询的等待上限（毫秒） */
-    private static final long QUERY_TIMEOUT_MS = 2000L;
-    /** 连续多少次查询没回包就认定这个服务器不支持查询 */
-    private static final int QUERY_FAILURE_LIMIT = 3;
     /** 一轮定时重取最多处理几个容器（可配），实际还受 Servux 通道在飞上限约束 */
     private int refreshCursor;
     /** 只重取玩家这么多格以内的容器 */
@@ -69,12 +64,7 @@ public final class ContainerDataManager {
 
     /** 已经排队或正在查的坐标 */
     private final Set<BlockPos> pending = ConcurrentHashMap.newKeySet();
-    private final Deque<BlockPos> queryQueue = new ArrayDeque<>();
 
-    private BlockPos inFlight;
-    private long inFlightSince;
-    private int consecutiveFailures;
-    private boolean queryUnsupported;
     private int refreshTicks;
 
     private ContainerDataManager() {
@@ -85,11 +75,8 @@ public final class ContainerDataManager {
     }
 
     public static void setup() {
-        // 查询超时与定时重取都靠 tick 推进，没有别的定时器
-        ClientTickEvents.END_CLIENT_TICK.register(client -> {
-            INSTANCE.tick();
-            INSTANCE.tickRefresh();
-        });
+        // 定时重取靠 tick 推进，没有别的定时器
+        ClientTickEvents.END_CLIENT_TICK.register(client -> INSTANCE.tickRefresh());
     }
 
     // ---------- 对外入口 ----------
@@ -213,18 +200,14 @@ public final class ContainerDataManager {
         };
     }
 
-    /** 联机时是否有办法向服务端要数据：Servux 通道，或者原版 NBT 查询。 */
+    /** 联机时是否有办法向服务端要数据：只有 Servux 通道这一条（原版查询已整条去掉，原因见类注释）。 */
     private boolean canReachServer() {
-        return ServuxTweaksChannel.get().isAvailable() || this.canQuery();
+        return ServuxTweaksChannel.get().isAvailable();
     }
 
-    /** 掉线、换世界、清空高亮时重置查询状态（"这个服务器不支持查询"的标记也跟着清）。 */
+    /** 掉线、换世界、清空高亮时重置在途请求。 */
     public void reset() {
         this.pending.clear();
-        this.queryQueue.clear();
-        this.inFlight = null;
-        this.consecutiveFailures = 0;
-        this.queryUnsupported = false;
     }
 
     // ---------- ① 内置服务端 ----------
@@ -305,22 +288,12 @@ public final class ContainerDataManager {
     // ---------- ② 服务端查询 ----------
 
     /**
-     * 联机取数据：优先 Servux 自定义通道（非 OP 也能用），通道不可用再退回原版 NBT 查询（要权限≥2 或服务端放行）。
+     * 联机取数据：走 Servux 自定义通道（非 OP 也能用，前提是服务端装了 Servux 且放行 tweaks_data）。
      *
      * @return 是否已经接下这次请求
      */
     private boolean requestFromServer(BlockPos pos) {
-        if (ServuxTweaksChannel.get().requestBlockEntity(pos)) {
-            return true;
-        }
-
-        if (!this.canQuery()) {
-            return false;
-        }
-
-        this.queryQueue.add(pos);
-        this.pumpQueryQueue();
-        return true;
+        return ServuxTweaksChannel.get().requestBlockEntity(pos);
     }
 
     /** Servux 通道拿到了方块实体 NBT。 */
@@ -348,87 +321,11 @@ public final class ContainerDataManager {
         this.pending.remove(pos);
     }
 
-    /** Servux 通道判定不可用：把还在排队的位置交给原版查询，别让它们卡在 pending 里。 */
+    /** Servux 通道判定不可用：把还在排队的位置从在途表里摘掉，等开界面时再抓。 */
     void onServuxUnavailable(Iterable<BlockPos> queued) {
-        boolean query = this.canQuery();
-
         for (BlockPos pos : queued) {
-            if (query && !HighlightState.get().hasContents(pos)) {
-                this.queryQueue.add(pos.toImmutable());
-            } else {
-                this.pending.remove(pos);
-            }
+            this.pending.remove(pos);
         }
-
-        this.pumpQueryQueue();
-    }
-
-    private boolean canQuery() {
-        return !this.queryUnsupported && MinecraftClient.getInstance().getNetworkHandler() != null;
-    }
-
-    private void pumpQueryQueue() {
-        if (this.inFlight != null || this.queryQueue.isEmpty() || this.queryUnsupported) {
-            return;
-        }
-
-        ClientPlayNetworkHandler handler = MinecraftClient.getInstance().getNetworkHandler();
-        if (handler == null) {
-            this.failAllQueries();
-            return;
-        }
-
-        BlockPos pos = this.queryQueue.poll();
-        if (!this.pending.contains(pos)) {
-            this.pumpQueryQueue();
-            return;
-        }
-
-        this.inFlight = pos;
-        this.inFlightSince = System.currentTimeMillis();
-
-        // 自己发包收包，不碰原版那个只有一格的回调槽（详见 VanillaQueryChannel 的类注释）
-        if (!VanillaQueryChannel.get().send(pos)) {
-            this.inFlight = null;
-            this.failAllQueries();
-        }
-    }
-
-    void onQueryResponse(BlockPos pos, @Nullable NbtCompound nbt) {
-        // 不是我们等的那次，忽略
-        if (!pos.equals(this.inFlight)) {
-            return;
-        }
-
-        this.inFlight = null;
-        this.pending.remove(pos);
-        this.consecutiveFailures = 0;
-        this.acceptServerContents(pos, nbt);
-        this.pumpQueryQueue();
-    }
-
-    /** 每个 tick 检查在飞的查询有没有超时；连续失败到上限就不再查，退回开界面。 */
-    private void tick() {
-        if (this.inFlight == null || System.currentTimeMillis() - this.inFlightSince <= QUERY_TIMEOUT_MS) {
-            return;
-        }
-
-        BlockPos lost = this.inFlight;
-        this.inFlight = null;
-        this.pending.remove(lost);
-
-        if (++this.consecutiveFailures >= QUERY_FAILURE_LIMIT) {
-            this.failAllQueries();
-        }
-
-        this.pumpQueryQueue();
-    }
-
-    private void failAllQueries() {
-        this.queryUnsupported = true;
-        this.pending.clear();
-        this.queryQueue.clear();
-        this.inFlight = null;
     }
 
     // ---------- 公共部分 ----------

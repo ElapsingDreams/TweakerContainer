@@ -3,7 +3,6 @@ package cn.yireve.tweakercontainer.client;
 import cn.yireve.tweakercontainer.client.config.HighlightConfig;
 import cn.yireve.tweakercontainer.client.data.ContainerDataManager;
 import cn.yireve.tweakercontainer.client.data.ServuxTweaksChannel;
-import cn.yireve.tweakercontainer.client.data.VanillaQueryChannel;
 import cn.yireve.tweakercontainer.client.gui.GuiConfigs;
 import cn.yireve.tweakercontainer.client.handler.InteractionHandler;
 import fi.dy.masa.malilib.config.ConfigManager;
@@ -48,7 +47,6 @@ public class TweakerContainerClient implements ClientModInitializer {
         InteractionHandler.setup();
         ContainerDataManager.setup();
         ServuxTweaksChannel.setup();
-        VanillaQueryChannel.setup();
 
         setupHotkeys();
     }
