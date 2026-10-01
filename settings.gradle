@@ -1,11 +1,47 @@
+import groovy.json.JsonSlurper
+
+// 参考 oh-my-minecraft-client：每个 MC 版本一个子项目，项目目录在 versions/<版本号>，
+// 全部共用第一份版本目录里的 build.gradle（统一改一份即可）。
 pluginManagement {
     repositories {
+        mavenLocal()
+        mavenCentral()
+        gradlePluginPortal()
+
         maven {
             name = 'Fabric'
             url = 'https://maven.fabricmc.net/'
         }
-        gradlePluginPortal()
+        maven {
+            name = 'Jitpack'
+            url = 'https://jitpack.io'
+        }
+        maven {
+            name = 'Masa'
+            url = 'https://masa.dy.fi/maven/sakura-ryoko'
+        }
     }
+
+    resolutionStrategy {
+        eachPlugin {
+            // ReplayMod 预处理器（Fallen-Breath 的 fork）只在 jitpack 上
+            if (requested.id.id == 'com.replaymod.preprocess') {
+                useModule("com.github.Fallen-Breath:preprocessor:${requested.version}")
+            }
+        }
+    }
+}
+
+Map<String, List<String>> settings = file('settings.json').withReader {
+    new JsonSlurper().parse(it) as Map<String, List<String>>
+}
+
+for (String version : settings.get('versions')) {
+    include(":$version")
+
+    ProjectDescriptor proj = project(":$version")
+    proj.setProjectDir(file("versions/$version"))
+    proj.setBuildFileName("../${settings.versions.get(0)}/build.gradle")
 }
 
 rootProject.name = 'tweakercontainer'

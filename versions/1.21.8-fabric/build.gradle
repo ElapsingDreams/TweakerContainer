@@ -1,0 +1,98 @@
+// 所有 MC 版本共用的构建脚本（settings.gradle 把每个子项目的 buildFileName 指到这里）。
+// 版本相关的依赖值来自各版本目录下的 gradle.properties。
+plugins {
+    id 'maven-publish'
+}
+
+apply(plugin: 'fabric-loom')
+apply(plugin: 'com.replaymod.preprocess')
+
+String modPlatform = 'fabric'
+int mcVersion = 0
+
+preprocess {
+    mcVersion = vars.get().get('MC')
+    vars.put('MC', mcVersion)
+    vars.put('FABRIC', 1)
+}
+
+base {
+    // 产物名形如 tweakercontainer-2.2.5-mc1.21.7.jar：文件名里带 MC 版本，jar 内部的 mod 版本保持干净的 a.b.c
+    archivesName = rootProject.property('archives_base_name')
+    group = rootProject.property('maven_group')
+    version = "${rootProject.property('mod_version')}-mc${project.property('dependencies.minecraft_version')}"
+}
+
+repositories {
+    mavenCentral()
+    maven { url = 'https://jitpack.io/' }
+    maven { url = 'https://api.modrinth.com/maven/' }
+    maven { url = 'https://maven.fabricmc.net/' }
+    // malilib / litematica：sakura-ryoko 的社区构建
+    maven {
+        url = 'https://masa.dy.fi/maven/sakura-ryoko'
+        content { includeGroupAndSubgroups('fi.dy.masa') }
+    }
+}
+
+dependencies {
+    minecraft "com.mojang:minecraft:${project.property('dependencies.minecraft_version')}"
+    mappings "net.fabricmc:yarn:${project.property('dependencies.yarn_mappings')}:v2"
+    modImplementation "net.fabricmc:fabric-loader:${project.property('dependencies.loader_version')}"
+    modImplementation "net.fabricmc.fabric-api:fabric-api:${project.property('dependencies.fabric_api_version')}"
+
+    modImplementation "fi.dy.masa.malilib:malilib-fabric-${project.property('dependencies.dep_mc')}:${project.property('dependencies.malilib_version')}"
+    modImplementation "fi.dy.masa.litematica:litematica-fabric-${project.property('dependencies.dep_mc')}:${project.property('dependencies.litematica_version')}"
+}
+
+processResources {
+    // jar 里记录的 mod 版本保持 a.b.c（不带 MC 后缀），MC 版本只体现在文件名和依赖声明里
+    inputs.property 'version', rootProject.property('mod_version')
+    inputs.property 'minecraft_dependency', project.property('dependencies.minecraft_dependency')
+    inputs.property 'loader_version', project.property('dependencies.loader_version')
+    inputs.property 'malilib_dependency', project.property('dependencies.malilib_dependency')
+    inputs.property 'litematica_dependency', project.property('dependencies.litematica_dependency')
+    filteringCharset 'UTF-8'
+
+    filesMatching('fabric.mod.json') {
+        expand 'version': rootProject.property('mod_version'),
+                'minecraft_version': project.property('dependencies.minecraft_version'),
+                'minecraft_dependency': project.property('dependencies.minecraft_dependency'),
+                'loader_version': project.property('dependencies.loader_version'),
+                'malilib_dependency': project.property('dependencies.malilib_dependency'),
+                'litematica_dependency': project.property('dependencies.litematica_dependency')
+    }
+}
+
+// Minecraft 26.1+ 用 Java 25，之前的版本用 21
+int javaVersion = mcVersion >= 260200 ? 25 : 21
+
+tasks.withType(JavaCompile).configureEach {
+    it.options.encoding = 'UTF-8'
+    it.options.release.set(javaVersion)
+}
+
+java {
+    def target = JavaVersion.toVersion(javaVersion)
+
+    if (JavaVersion.current() < target) {
+        toolchain.languageVersion = JavaLanguageVersion.of(javaVersion)
+    }
+
+    withSourcesJar()
+}
+
+jar {
+    from("${rootDir}/LICENSE") {
+        rename { "${it}_${base.archivesName.get()}" }
+    }
+}
+
+publishing {
+    publications {
+        create('mavenJava', MavenPublication) {
+            artifactId = base.archivesName.get()
+            from components.java
+        }
+    }
+}

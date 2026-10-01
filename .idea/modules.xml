@@ -3,9 +3,8 @@
   <component name="ProjectModuleManager">
     <modules>
       <module fileurl="file://$PROJECT_DIR$/.idea/modules/tweakercontainer.iml" filepath="$PROJECT_DIR$/.idea/modules/tweakercontainer.iml" />
-      <module fileurl="file://$PROJECT_DIR$/.idea/modules/tweakercontainer.client.iml" filepath="$PROJECT_DIR$/.idea/modules/tweakercontainer.client.iml" />
-      <module fileurl="file://$PROJECT_DIR$/.idea/modules/tweakercontainer.main.iml" filepath="$PROJECT_DIR$/.idea/modules/tweakercontainer.main.iml" />
-      <module fileurl="file://$PROJECT_DIR$/.idea/modules/tweakercontainer.test.iml" filepath="$PROJECT_DIR$/.idea/modules/tweakercontainer.test.iml" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/modules/versions/1.21.8-fabric/tweakercontainer.1.21.8-fabric.main.iml" filepath="$PROJECT_DIR$/.idea/modules/versions/1.21.8-fabric/tweakercontainer.1.21.8-fabric.main.iml" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/modules/versions/1.21.8-fabric/tweakercontainer.1.21.8-fabric.test.iml" filepath="$PROJECT_DIR$/.idea/modules/versions/1.21.8-fabric/tweakercontainer.1.21.8-fabric.test.iml" />
     </modules>
   </component>
 </project>
