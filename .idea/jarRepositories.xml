@@ -81,5 +81,10 @@
       <option name="name" value="maven4" />
       <option name="url" value="https://masa.dy.fi/maven/sakura-ryoko" />
     </remote-repository>
+    <remote-repository>
+      <option name="id" value="maven3" />
+      <option name="name" value="maven3" />
+      <option name="url" value="https://maven.fallenbreath.me/releases" />
+    </remote-repository>
   </component>
 </project>

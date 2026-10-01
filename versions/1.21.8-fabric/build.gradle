@@ -20,10 +20,10 @@ sourceSets {
 loom {
     runs {
         client {
-            runDir = rootProject.file('run/1.21.8')
+            runDir "${rootDir}/run/1.21.8"
         }
         server {
-            runDir = rootProject.file('run/1.21.8-server')
+            runDir "${rootDir}/run/1.21.8-server"
         }
     }
 }

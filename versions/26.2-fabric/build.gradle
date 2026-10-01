@@ -14,10 +14,10 @@ apply(plugin: 'net.fabricmc.fabric-loom')
 loom {
     runs {
         client {
-            runDir = rootProject.file('run/26.2')
+            runDir "${rootDir}/run/26.2"
         }
         server {
-            runDir = rootProject.file('run/26.2-server')
+            runDir "${rootDir}/run/26.2-server"
         }
     }
 }
