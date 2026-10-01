@@ -1,0 +1,13 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" factoryName="Application" name="Minecraft Client (1.21.8)" type="Application">
+    <option name="MAIN_CLASS_NAME" value="net.fabricmc.devlaunchinjector.Main"/>
+    <module name="tweakercontainer.1.21.8-fabric.main"/>
+    <option name="PROGRAM_PARAMETERS" value=""/>
+    <option name="VM_PARAMETERS" value="-Dfabric.dli.config=$PROJECT_DIR$/.gradle/loom-cache/projects/1.21.8-fabric/launch.cfg -Dfabric.dli.env=client -Dfabric.dli.main=net.fabricmc.loader.impl.launch.knot.KnotClient"/>
+    <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$/run/"/>
+    <method v="2">
+      <option name="Make" enabled="true"/>
+    </method>
+    <shortenClasspath name="ARGS_FILE"/>
+  </configuration>
+</component>

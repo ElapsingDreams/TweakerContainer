@@ -40,16 +40,30 @@ tweakercontainer/
 ## 环境要求
 
 - **JDK 21 以上**跑 Gradle 本身。
-- **26.2 要求跑 Gradle 的那个 JVM 是 Java 25**（Loom 会直接检查）。本机没有装 JDK 25，
-  用的是启动器自带的运行时：
+- **26.2 要求跑 Gradle 的那个 JVM 是 Java 25**（Loom 会直接检查）。项目 `gradle.properties` 里已经写好了
+  `org.gradle.java.home`（指到本机启动器自带的 Java 25），所以命令行直接 `gradlew buildAll` 就行，
+  不用再手动设 `JAVA_HOME`；IDEA 的 Gradle JVM 也会用这个设置（改完记得 Reload Gradle Project）。
+  换机器时改那一行，或删掉它改用环境变量 `JAVA_HOME` / IDEA 里的 Gradle JVM 设置。
 
   ```powershell
+  # 需要手动指定时：
   $env:JAVA_HOME = 'C:\Users\Envision\AppData\Roaming\.minecraft\runtime\java-runtime-epsilon'
   .\gradlew.bat :26.2-fabric:build
   ```
 
-  用 Java 21 跑 `:1.21.8-fabric:build` 没问题；`buildAll` 会因为要构建 26.2 而需要 Java 25。
 - Gradle wrapper 是 **9.5.0**（Loom 1.17.21 要求 ≥ 9.5）。
+
+## IDEA 里的运行配置
+
+`.idea/runConfigurations/` 下有两个客户端配置，覆盖两个版本：
+
+| 配置名 | 指向的模块 | 运行目录 |
+|---|---|---|
+| `Minecraft Client (1.21.8)` | `tweakercontainer.1.21.8-fabric.main` | 仓库根目录的 `run/`（原来的测试存档、投影、配置都在这） |
+| `Minecraft Client (26.2)` | `tweakercontainer.26.2-fabric.main` | `versions/26.2-fabric/run/`，并用 Java 25 启动 |
+
+新增版本后需要在 IDEA 里 **Reload Gradle Project**，让它把新的子项目导入成模块，
+运行配置里的模块名才对得上（命名规则：`<根项目名>.<子项目路径>.<sourceSet>`）。
 
 ## 两个版本为什么用不同的 Loom 插件
 
