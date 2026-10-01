@@ -18,10 +18,9 @@ pluginManagement {
     }
 }
 
-// 26.2 需要 Java 25：本机没装的话让 Gradle 自己下载一个 JDK 25 工具链
-plugins {
-    id 'org.gradle.toolchains.foojay-resolver-convention' version '0.8.0'
-}
+// 注意：不要再加 foojay-resolver-convention 之类的工具链自动下载插件：
+// 它与 Gradle 9.5 不兼容（JvmVendorSpec.IBM_SEMERU 已被移除），会让 IDEA 侧的构建直接失败。
+// Java 25 由 gradle.properties 里的 org.gradle.java.home 指定，工具链解析用当前 JVM 即可。
 
 Map<String, List<String>> settings = file('settings.json').withReader {
     new JsonSlurper().parse(it) as Map<String, List<String>>

@@ -15,6 +15,19 @@ sourceSets {
     }
 }
 
+// 运行目录按版本分开放（仓库根目录下，已被 .gitignore 忽略）：
+// 这样 gradlew runClient 与 IDEA 的运行配置用同一个目录
+loom {
+    runs {
+        client {
+            runDir = rootProject.file('run/1.21.8')
+        }
+        server {
+            runDir = rootProject.file('run/1.21.8-server')
+        }
+    }
+}
+
 base {
     // 产物名形如 tweakercontainer-2.2.5-1.21.7.jar：文件名里带这个构建对应的 MC 版本，
     // jar 内部的 mod 版本保持干净的 a.b.c

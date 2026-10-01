@@ -10,6 +10,18 @@ plugins {
 
 apply(plugin: 'net.fabricmc.fabric-loom')
 
+// 运行目录按版本分开放（仓库根目录下，已被 .gitignore 忽略）
+loom {
+    runs {
+        client {
+            runDir = rootProject.file('run/26.2')
+        }
+        server {
+            runDir = rootProject.file('run/26.2-server')
+        }
+    }
+}
+
 base {
     // 产物名形如 tweakercontainer-2.2.5-26.2.jar
     archivesName = rootProject.property('archives_base_name')

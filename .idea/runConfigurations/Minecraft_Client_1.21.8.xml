@@ -4,7 +4,7 @@
     <module name="tweakercontainer.1.21.8-fabric.main"/>
     <option name="PROGRAM_PARAMETERS" value=""/>
     <option name="VM_PARAMETERS" value="-Dfabric.dli.config=$PROJECT_DIR$/.gradle/loom-cache/projects/1.21.8-fabric/launch.cfg -Dfabric.dli.env=client -Dfabric.dli.main=net.fabricmc.loader.impl.launch.knot.KnotClient"/>
-    <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$/run/"/>
+    <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$/run/1.21.8/"/>
     <method v="2">
       <option name="Make" enabled="true"/>
     </method>
