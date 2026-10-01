@@ -8,7 +8,7 @@ import fi.dy.masa.malilib.util.WorldUtils;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.client.Minecraft;
 import net.minecraft.world.Container;
-import net.minecraft.world.inventory.AbstractContainerMenuFactory;
+import net.minecraft.world.inventory.MenuProvider;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.level.Level;
@@ -30,7 +30,7 @@ public class InventoryOverlay {
 
     public static InventoryOverlay getInstance() {
         if (instance == null) {
-            instance = new InventoryOverlay(BlockPos.ORIGIN);
+            instance = new InventoryOverlay(BlockPos.ZERO);
         }
         return instance;
     }
@@ -67,7 +67,7 @@ public class InventoryOverlay {
         }
 
         BlockState state = world.getBlockState(pos);
-        HighlightState highlightState = HighlightState.get();
+        HighlightState highlightState = HighlightState.getValue();
 
         // 蓝图里同样是容器的位置（也就是投影区的箱子）只可能是投影来源，绝不能登记成材料容器，
         // 否则投影上会冒出蓝框、取消时也会提示成清了材料。蓝图内容读不出来（比如空箱子）就不登记

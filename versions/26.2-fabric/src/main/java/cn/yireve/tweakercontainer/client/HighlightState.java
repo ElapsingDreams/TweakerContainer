@@ -5,7 +5,7 @@ import cn.yireve.tweakercontainer.client.data.ContainerDataManager;
 import cn.yireve.tweakercontainer.client.features.InventoryOverlay;
 import cn.yireve.tweakercontainer.client.features.PlacementContainerAccess;
 import fi.dy.masa.malilib.util.InventoryUtils;
-import fi.dy.masa.malilib.util.ItemType;
+import fi.dy.masa.malilib.util.data.ItemType;
 import net.minecraft.world.level.block.EntityBlock;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.ChestBlock;
@@ -162,7 +162,7 @@ public final class HighlightState {
             return partner;
         }
 
-        Level world = Minecraft.getInstance().world;
+        Level world = Minecraft.getInstance().level;
         return world == null ? null : findChestPartner(world, pos, world.getBlockState(pos));
     }
 
@@ -250,7 +250,7 @@ public final class HighlightState {
     private void updateOpenProjectionMissing() {
         openProjectionMissing.clear();
 
-        Level world = Minecraft.getInstance().world;
+        Level world = Minecraft.getInstance().level;
         BlockPos openProjection = canonicalProjectionContainer(InventoryOverlay.getCurrentContainerPos());
         if (world == null || openProjection == null) {
             return;
@@ -264,15 +264,15 @@ public final class HighlightState {
 
         Map<ItemType, Integer> required = new HashMap<>();
         Container inventory = schematicInv.get();
-        for (int i = 0; i < inventory.size(); i++) {
-            merge(required, inventory.getStack(i), 0);
+        for (int i = 0; i < inventory.getContainerSize(); i++) {
+            merge(required, inventory.getItem(i), 0);
         }
 
         Map<ItemType, Integer> present = new HashMap<>();
         Container cached = storageContainerCache.get(openProjection);
         if (cached != null) {
-            for (int i = 0; i < cached.size(); i++) {
-                merge(present, cached.getStack(i), MAX_NESTING_DEPTH);
+            for (int i = 0; i < cached.getContainerSize(); i++) {
+                merge(present, cached.getItem(i), MAX_NESTING_DEPTH);
             }
         }
 
@@ -293,7 +293,7 @@ public final class HighlightState {
     public BoxSelection selectContainersInBox() {
         BlockPos start = projectionCornerStart;
         BlockPos end = projectionCornerEnd;
-        Level world = Minecraft.getInstance().world;
+        Level world = Minecraft.getInstance().level;
         if (start == null || end == null || world == null) {
             return new BoxSelection(0, 0);
         }
@@ -422,7 +422,7 @@ public final class HighlightState {
         Map<ItemType, Integer> source = projectionView ? projectionNeedSource() : remainingNeeded;
         ItemType self = keyOf(stack);
         for (ItemType key : source.keySet()) {
-            if (key.getStack().getItem() == stack.getItem() && !key.equals(self)) {
+            if (key.getItem().getItem() == stack.getItem() && !key.equals(self)) {
                 return true;
             }
         }
@@ -484,8 +484,8 @@ public final class HighlightState {
                 continue;
             }
 
-            for (int i = 0; i < projectionInv.size(); i++) {
-                merge(containerCount, projectionInv.getStack(i), MAX_NESTING_DEPTH);
+            for (int i = 0; i < projectionInv.getContainerSize(); i++) {
+                merge(containerCount, projectionInv.getItem(i), MAX_NESTING_DEPTH);
             }
         }
 
@@ -525,8 +525,8 @@ public final class HighlightState {
                 continue;
             }
 
-            for (int i = 0; i < storageInv.size(); i++) {
-                ItemStack storedStack = storageInv.getStack(i);
+            for (int i = 0; i < storageInv.getContainerSize(); i++) {
+                ItemStack storedStack = storageInv.getItem(i);
                 if (containsNeeded(remainingNeeded, storedStack, MAX_NESTING_DEPTH)) {
                     matchingStorageContainers.add(storagePos);
 
@@ -575,7 +575,7 @@ public final class HighlightState {
         }
 
         BlockPos immutablePos = pos.immutable();
-        Level world = Minecraft.getInstance().world;
+        Level world = Minecraft.getInstance().level;
         BlockState state = world != null ? world.getBlockState(immutablePos) : null;
 
         // 投影容器（大箱子两半都算）只缓存内容用于扣减需求，不登记为材料容器，
@@ -593,9 +593,9 @@ public final class HighlightState {
         }
 
         if (world != null && state != null && state.getBlock() instanceof ChestBlock) {
-            ChestType chestType = state.get(ChestBlock.CHEST_TYPE);
-            if (chestType != ChestType.SINGLE && inv.size() % 2 == 0) {
-                int halfSize = inv.size() / 2;
+            ChestType chestType = state.get(ChestBlock.TYPE);
+            if (chestType != ChestType.SINGLE && inv.getContainerSize() % 2 == 0) {
+                int halfSize = inv.getContainerSize() / 2;
                 // 与 PlacementContainerAccess 的顺序保持一致：RIGHT 时本格那半在前
                 boolean selfFirst = chestType == ChestType.RIGHT;
 
@@ -619,11 +619,11 @@ public final class HighlightState {
         if (world == null || state == null || !(state.getBlock() instanceof ChestBlock)) {
             return null;
         }
-        if (state.get(ChestBlock.CHEST_TYPE) == ChestType.SINGLE) {
+        if (state.get(ChestBlock.TYPE) == ChestType.SINGLE) {
             return null;
         }
 
-        BlockPos partner = pos.add(ChestBlock.getConnectedDirection(state).getVector());
+        BlockPos partner = pos.add(ChestBlock.getConnectedDirection(state).step());
         return world.getBlockState(partner).getBlock() instanceof ChestBlock ? partner : null;
     }
 
@@ -646,7 +646,7 @@ public final class HighlightState {
     private static SimpleContainer copyRange(Container source, int from, int size) {
         SimpleContainer result = new SimpleContainer(size);
         for (int i = 0; i < size; i++) {
-            result.setStack(i, source.getStack(from + i).copy());
+            result.setItem(i, source.getItem(from + i).copy());
         }
         return result;
     }
@@ -658,7 +658,7 @@ public final class HighlightState {
      * 不凑巧（比如另一半那次请求失败后靠别的路径登记上来），漏配就会画成两个小框。这里每次重算前扫一遍兜底。
      */
     public void pairRegisteredChests() {
-        Level world = Minecraft.getInstance().world;
+        Level world = Minecraft.getInstance().level;
         if (world == null || storageContainers.isEmpty()) {
             return;
         }
@@ -746,7 +746,7 @@ public final class HighlightState {
 
         putStorageContainer(immutablePos, inv, state);
 
-        BlockPos partner = findChestPartner(Minecraft.getInstance().world, immutablePos, state);
+        BlockPos partner = findChestPartner(Minecraft.getInstance().level, immutablePos, state);
         if (partner != null && storageContainerCache.containsKey(partner)) {
             storageContainerPartners.put(immutablePos, partner);
             storageContainerPartners.put(partner, immutablePos);
@@ -767,7 +767,7 @@ public final class HighlightState {
      */
     public boolean isStorageContainerPresent(BlockPos pos, Level world) {
         BlockState expected = storageContainerStates.get(pos);
-        if (expected == null || !world.isPosLoaded(pos)) {
+        if (expected == null || !world.isLoaded(pos)) {
             return true;
         }
 
@@ -779,7 +779,7 @@ public final class HighlightState {
 
     /** 复核登记的仓储容器：被撬掉或换成别的方块就取消登记，顺带清掉过期缓存。 */
     private void validateStorageContainers() {
-        Level world = Minecraft.getInstance().world;
+        Level world = Minecraft.getInstance().level;
         if (world == null) {
             return;
         }
@@ -834,7 +834,7 @@ public final class HighlightState {
         BlockPos partner = getChestPartner(immutablePos);
         if (partner == null) {
             // 还没建立配对信息时，按方块朝向再找一次大箱子的另一半
-            Level world = Minecraft.getInstance().world;
+            Level world = Minecraft.getInstance().level;
             partner = findChestPartner(world, immutablePos, world != null ? world.getBlockState(immutablePos) : null);
         }
 
@@ -862,7 +862,7 @@ public final class HighlightState {
         }
 
         BlockPos immutablePos = pos.immutable();
-        Level world = Minecraft.getInstance().world;
+        Level world = Minecraft.getInstance().level;
         if (world == null) {
             return false;
         }
@@ -962,7 +962,7 @@ public final class HighlightState {
     private void rebuildProjectionRequirements() {
         currentMissingItems.clear();
 
-        Level world = Minecraft.getInstance().world;
+        Level world = Minecraft.getInstance().level;
         if (world == null) {
             return;
         }
@@ -975,8 +975,8 @@ public final class HighlightState {
             }
 
             Container inventory = schematicInv.get();
-            for (int i = 0; i < inventory.size(); i++) {
-                ItemStack stack = inventory.getStack(i);
+            for (int i = 0; i < inventory.getContainerSize(); i++) {
+                ItemStack stack = inventory.getItem(i);
                 if (!stack.isEmpty()) {
                     currentMissingItems.add(stack.copy());
                 }
@@ -985,8 +985,8 @@ public final class HighlightState {
     }
 
     private boolean isInventoryEmpty(Container inventory) {
-        for (int i = 0; i < inventory.size(); i++) {
-            if (!inventory.getStack(i).isEmpty()) {
+        for (int i = 0; i < inventory.getContainerSize(); i++) {
+            if (!inventory.getItem(i).isEmpty()) {
                 return false;
             }
         }
@@ -1014,8 +1014,8 @@ public final class HighlightState {
         }
 
         Map<ItemType, Integer> available = new HashMap<>();
-        for (int i = 0; i < storageInv.size(); i++) {
-            merge(available, storageInv.getStack(i), MAX_NESTING_DEPTH);
+        for (int i = 0; i < storageInv.getContainerSize(); i++) {
+            merge(available, storageInv.getItem(i), MAX_NESTING_DEPTH);
         }
 
         for (Map.Entry<ItemType, Integer> entry : required.entrySet()) {

@@ -31,7 +31,7 @@ public class ContainerUtils {
 
         BlockEntity blockEntity = world != null ? world.getBlockEntity(pos) : null;
         if (blockEntity == null) {
-            blockEntity = provider.createBlockEntity(pos, state);
+            blockEntity = provider.newBlockEntity(pos, state);
         }
 
         return blockEntity instanceof Container inventory ? Optional.of(inventory) : Optional.empty();

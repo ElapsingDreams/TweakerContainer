@@ -3,9 +3,9 @@ package cn.yireve.tweakercontainer.client.mixins;
 import cn.yireve.tweakercontainer.client.HighlightState;
 import cn.yireve.tweakercontainer.client.config.HighlightConfig;
 import cn.yireve.tweakercontainer.client.features.InventoryOverlay;
-import fi.dy.masa.malilib.util.ItemType;
+import fi.dy.masa.malilib.util.data.ItemType;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.screens.inventory.CreativeModeInventoryScreen;
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
 import net.minecraft.client.gui.screens.inventory.MenuAccess;
@@ -75,7 +75,7 @@ public abstract class HandledScreenMixin<T extends AbstractContainerMenu> {
         // 关闭界面时清掉当前容器记录，否则再打开背包会被当成还停留在投影容器里
         InventoryOverlay.clearCurrentContainer();
         if (!isEnabled()) return;
-        HighlightState.get().updateMatching();
+        HighlightState.getValue().updateMatching();
     }
 
     /**
@@ -90,14 +90,14 @@ public abstract class HandledScreenMixin<T extends AbstractContainerMenu> {
         if (!isEnabled()) return;
 
         // 只处理刚右击过的容器；玩家背包、创造模式物品栏等界面没有待处理坐标
-        BlockPos clickedPos = HighlightState.get().getAndClearTempProcessingPos();
+        BlockPos clickedPos = HighlightState.getValue().getAndClearTempProcessingPos();
         if (clickedPos == null || isNonContainerScreen()) return;
 
-        AbstractContainerMenu handler = ((MenuAccess<AbstractContainerMenu>) (Object) this).getScreenHandler();
-        if (tcCapturedSyncId != null && tcCapturedSyncId == handler.syncId) {
+        AbstractContainerMenu handler = ((MenuAccess<AbstractContainerMenu>) (Object) this).getMenu();
+        if (tcCapturedSyncId != null && tcCapturedSyncId == handler.containerId) {
             return; // init 在窗口尺寸变化时会再次调用
         }
-        tcCapturedSyncId = handler.syncId;
+        tcCapturedSyncId = handler.containerId;
         tcCapturePos = clickedPos;
 
         // 首次抓取：此刻槽位内容可能还没同步过来，收到槽位更新后会再抓一次
@@ -105,11 +105,11 @@ public abstract class HandledScreenMixin<T extends AbstractContainerMenu> {
 
         // 槽位一变就标脏：重算仍由 tick / 渲染的节流兜底，实际每帧最多算一次，
         // 这样搬东西时槽位数字与匹配结果基本立刻跟上
-        handler.addListener(new ContainerListener() {
+        handler.addSlotListener(new ContainerListener() {
             @Override
             public void onSlotUpdate(AbstractContainerMenu screenHandler, int slotId, ItemStack stack) {
                 tcRecapturePending = true;
-                HighlightState.get().markDirty();
+                HighlightState.getValue().markDirty();
             }
 
             @Override
@@ -133,10 +133,10 @@ public abstract class HandledScreenMixin<T extends AbstractContainerMenu> {
         }
 
         // 同一屏的非玩家槽位共用一个 Container，取第一个就够
-        AbstractContainerMenu handler = ((MenuAccess<AbstractContainerMenu>) (Object) this).getScreenHandler();
+        AbstractContainerMenu handler = ((MenuAccess<AbstractContainerMenu>) (Object) this).getMenu();
         for (Slot slot : handler.slots) {
-            if (!(slot.inventory instanceof Inventory)) {
-                HighlightState.get().cacheStorageInventory(tcCapturePos, slot.inventory);
+            if (!(slot.container instanceof Inventory)) {
+                HighlightState.getValue().cacheStorageInventory(tcCapturePos, slot.container);
                 return;
             }
         }
@@ -145,7 +145,7 @@ public abstract class HandledScreenMixin<T extends AbstractContainerMenu> {
     /**
      * 每 tick 一次的重算（内部按时间节流），不再由画槽位驱动。
      */
-    @Inject(method = "handledScreenTick",
+    @Inject(method = "containerTick",
         at = @At("HEAD"),
         cancellable = false
     )
@@ -158,15 +158,15 @@ public abstract class HandledScreenMixin<T extends AbstractContainerMenu> {
             captureContainer();
         }
 
-        HighlightState.get().ensureUpToDate();
+        HighlightState.getValue().ensureUpToDate();
     }
 
     @Inject(
-            method = "drawSlots",
+            method = "extractSlots",
             at = @At("HEAD"),
             cancellable = false
     )
-    private void onDrawSlots(GuiGraphics context, CallbackInfo ci) {
+    private void onDrawSlots(GuiGraphicsExtractor context, CallbackInfo ci) {
         // 每帧重置，保证“第一个匹配到的格子”按本次绘制顺序判定
         if (tcShownPutKeys != null) {
             tcShownPutKeys.clear();
@@ -184,14 +184,14 @@ public abstract class HandledScreenMixin<T extends AbstractContainerMenu> {
 
 
     @Inject(
-            method = "drawSlot",
+            method = "extractSlot",
             at = @At("HEAD"),
             cancellable = false
     )
-    private void onDrawSlot(GuiGraphics context, Slot slot, CallbackInfo ci) {
+    private void onDrawSlot(GuiGraphicsExtractor context, Slot slot, CallbackInfo ci) {
         if (!isEnabled()) return;
 
-        HighlightState state = HighlightState.get();
+        HighlightState state = HighlightState.getValue();
 
         // 背景必须画在物品之前，否则会盖住图标
         int color = getHighlightColor(state, slot);
@@ -201,14 +201,14 @@ public abstract class HandledScreenMixin<T extends AbstractContainerMenu> {
     }
 
     @Inject(
-            method = "drawSlot",
+            method = "extractSlot",
             at = @At("RETURN"),
             cancellable = false
     )
-    private void onDrawSlotCount(GuiGraphics context, Slot slot, CallbackInfo ci) {
+    private void onDrawSlotCount(GuiGraphicsExtractor context, Slot slot, CallbackInfo ci) {
         if (!isEnabled() || !tcShowCount) return;
 
-        ItemStack stack = slot.getStack();
+        ItemStack stack = slot.getItem();
         if (stack.isEmpty() || tcLabelAmount <= 0) return;
 
         // 以槽位左上角为锚点，右/下偏移与字号都由配置决定；避开原版画在右下角的堆叠数量
@@ -234,12 +234,12 @@ public abstract class HandledScreenMixin<T extends AbstractContainerMenu> {
         tcShowCount = false;
         tcLabelAmount = 0;
 
-        ItemStack stack = slot.getStack();
+        ItemStack stack = slot.getItem();
         if (stack.isEmpty() || !isHintSide(state, slot)) {
             return 0;
         }
 
-        boolean playerSlot = slot.inventory instanceof Inventory;
+        boolean playerSlot = slot.container instanceof Inventory;
         int color = playerSlot ? HighlightConfig.getSlotPutColor() : HighlightConfig.getSlotTakeColor();
 
         // 自身或内部容器内容命中需求时标色
@@ -355,7 +355,7 @@ public abstract class HandledScreenMixin<T extends AbstractContainerMenu> {
      */
     @Unique
     private boolean isHintSide(HighlightState state, Slot slot) {
-        boolean playerSlot = slot.inventory instanceof Inventory;
+        boolean playerSlot = slot.container instanceof Inventory;
 
         // 创造模式物品栏里只画正常背包格子；它那个"直接拿物品/销毁"的栏不画
         if (isNonContainerScreen() && !playerSlot) {

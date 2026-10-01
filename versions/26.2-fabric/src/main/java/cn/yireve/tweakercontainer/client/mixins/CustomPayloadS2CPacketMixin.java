@@ -21,7 +21,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
  */
 @Mixin(ClientboundCustomPayloadPacket.class)
 public class CustomPayloadS2CPacketMixin {
-    @Inject(method = "<init>(Lnet/minecraft/network/packet/CustomPacketPayload;)V", at = @At("TAIL"), require = 0)
+    @Inject(method = "<init>(Lnet/minecraft/network/protocol/common/custom/CustomPacketPayload;)V", at = @At("TAIL"), require = 0)
     private void tweakercontainer_onPayload(CustomPacketPayload payload, CallbackInfo ci) {
         ServuxTweaksChannel.get().onIncomingPayload(payload);
     }

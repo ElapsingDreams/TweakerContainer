@@ -9,7 +9,7 @@ import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.client.Minecraft;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.core.BlockPos;
 import org.slf4j.Logger;
 
@@ -43,7 +43,7 @@ import java.util.concurrent.ConcurrentHashMap;
 public final class ServuxTweaksChannel {
     private static final Logger LOGGER = LogUtils.getLogger();
 
-    public static final ResourceLocation CHANNEL_ID = ResourceLocation.of("servux", "tweaks");
+    public static final Identifier CHANNEL_ID = Identifier.fromNamespaceAndPath("servux", "tweaks");
 
     /** 握手与单次请求的等待上限（毫秒）。 */
     private static final long TIMEOUT_MS = 2000L;
@@ -144,7 +144,7 @@ public final class ServuxTweaksChannel {
     private static boolean isChannelRegistered() {
         try {
             Object registry = PayloadTypeRegistry.playC2S();
-            Object codec = registry.getClass().getMethod("get", ResourceLocation.class).invoke(registry, CHANNEL_ID);
+            Object codec = registry.getClass().getMethod("get", Identifier.class).invoke(registry, CHANNEL_ID);
             return codec != null;
         } catch (Throwable t) {
             LOGGER.warn("没法确认 servux:tweaks 通道的注册状态，按没注册处理", t);
@@ -263,7 +263,7 @@ public final class ServuxTweaksChannel {
     // ---------- 收发 ----------
 
     private void send(ServuxTweaksPacket packet) {
-        if (Minecraft.getInstance().getNetworkHandler() == null) {
+        if (Minecraft.getInstance().getConnection() == null) {
             return;
         }
 
@@ -290,7 +290,7 @@ public final class ServuxTweaksChannel {
      * 这里跑在网络线程上，只读字段、不改状态；真正处理回包丢回客户端线程做。
      */
     public void onIncomingPayload(CustomPacketPayload payload) {
-        if (!this.borrowed || payload == null || !CHANNEL_ID.equals(payload.getId().id())) {
+        if (!this.borrowed || payload == null || !CHANNEL_ID.equals(payload.type().id())) {
             return;
         }
 
@@ -342,8 +342,8 @@ public final class ServuxTweaksChannel {
 
     /** 这一条报文对应的 payload 类型（注册与收发都用它）。 */
     public record ServuxTweaksPayload(ServuxTweaksPacket data) implements CustomPacketPayload {
-        public static final CustomPacketPayload.Id<ServuxTweaksPayload> ID =
-                new CustomPacketPayload.Id<>(ServuxTweaksChannel.CHANNEL_ID);
+        public static final CustomPacketPayload.Type<ServuxTweaksPayload> ID =
+                new CustomPacketPayload.Type<>(ServuxTweaksChannel.CHANNEL_ID);
 
         public static final StreamCodec<net.minecraft.network.FriendlyByteBuf, ServuxTweaksPayload> CODEC =
                 CustomPacketPayload.codecOf(
@@ -351,7 +351,7 @@ public final class ServuxTweaksChannel {
                         buf -> new ServuxTweaksPayload(ServuxTweaksPacket.read(buf)));
 
         @Override
-        public CustomPacketPayload.Id<? extends CustomPacketPayload> getId() {
+        public CustomPacketPayload.Type<? extends CustomPacketPayload> getId() {
             return ID;
         }
     }

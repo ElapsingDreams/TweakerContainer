@@ -86,7 +86,7 @@ public final class ContainerDataManager {
      * 已有内容、或已经在查的位置会直接跳过，所以重复右键不会反复发查询。
      */
     public void ensureContents(BlockPos pos, BlockState state) {
-        if (pos == null || state == null || HighlightState.get().hasContents(pos.immutable())) {
+        if (pos == null || state == null || HighlightState.getValue().hasContents(pos.immutable())) {
             return;
         }
 
@@ -176,8 +176,8 @@ public final class ContainerDataManager {
         Vec3 playerPos = player.getPos();
         List<BlockPos> result = new ArrayList<>();
 
-        for (BlockPos pos : HighlightState.get().getStorageContainers()) {
-            if (playerPos.squaredDistanceTo(Vec3.atCenterOf(pos)) <= REFRESH_RANGE_SQ) {
+        for (BlockPos pos : HighlightState.getValue().getStorageContainers()) {
+            if (playerPos.distanceToSqr(Vec3.atCenterOf(pos)) <= REFRESH_RANGE_SQ) {
                 result.add(pos);
             }
         }
@@ -222,7 +222,7 @@ public final class ContainerDataManager {
         Minecraft client = Minecraft.getInstance();
         IntegratedServer server = client.getSingleplayerServer();
         ClientLevel clientWorld = client.world;
-        return server == null || clientWorld == null ? null : server.getWorld(clientWorld.getRegistryKey());
+        return server == null || clientWorld == null ? null : server.getWorld(clientWorld.dimension());
     }
 
     /**
@@ -252,7 +252,7 @@ public final class ContainerDataManager {
         this.pending.remove(pos);
 
         if (inventory != null) {
-            HighlightState.get().acceptStorageContents(pos, state, inventory);
+            HighlightState.getValue().acceptStorageContents(pos, state, inventory);
             this.ensureChestPartner(pos, state);
             return;
         }
@@ -271,9 +271,9 @@ public final class ContainerDataManager {
     private static Container readBlockEntityInventory(Level world, BlockPos pos) {
         BlockEntity blockEntity = world.getBlockEntity(pos);
 
-        if (!(blockEntity instanceof Container) && world.isPosLoaded(pos)) {
+        if (!(blockEntity instanceof Container) && world.isLoaded(pos)) {
             LevelChunk chunk = world.getChunk(pos.getX() >> 4, pos.getZ() >> 4);
-            blockEntity = chunk.getBlockEntity(pos, LevelChunk.CreationType.IMMEDIATE);
+            blockEntity = chunk.getBlockEntity(pos, LevelChunk.EntityCreationType.IMMEDIATE);
         }
 
         if (blockEntity instanceof Container inventory) {
@@ -281,7 +281,7 @@ public final class ContainerDataManager {
         }
 
         LOGGER.warn("内置服务端 {} 取不到容器内容：服务端方块={}，方块实体={}，区块已加载={}",
-                pos, world.getBlockState(pos), blockEntity, world.isPosLoaded(pos));
+                pos, world.getBlockState(pos), blockEntity, world.isLoaded(pos));
         return null;
     }
 
@@ -304,7 +304,7 @@ public final class ContainerDataManager {
 
     /** 服务端给的方块实体 NBT：转成背包写进缓存，大箱子顺手把另一半也带上。 */
     private void acceptServerContents(BlockPos pos, CompoundTag nbt) {
-        Level world = Minecraft.getInstance().world;
+        Level world = Minecraft.getInstance().level;
         BlockState state = world != null ? world.getBlockState(pos) : null;
 
         Container inventory = inventoryFromNbt(pos, state, nbt);
@@ -312,7 +312,7 @@ public final class ContainerDataManager {
             return;
         }
 
-        HighlightState.get().acceptStorageContents(pos, state, inventory);
+        HighlightState.getValue().acceptStorageContents(pos, state, inventory);
         this.ensureChestPartner(pos, state);
     }
 
@@ -333,16 +333,16 @@ public final class ContainerDataManager {
     /** 大箱子的另一半是另一个方块实体，各读各的；拿到两半后 {@link HighlightState} 会把它们配上对。 */
     private void ensureChestPartner(BlockPos pos, BlockState state) {
         if (state == null || !(state.getBlock() instanceof ChestBlock)
-                || state.get(ChestBlock.CHEST_TYPE) == ChestType.SINGLE) {
+                || state.get(ChestBlock.TYPE) == ChestType.SINGLE) {
             return;
         }
 
-        Level world = Minecraft.getInstance().world;
+        Level world = Minecraft.getInstance().level;
         if (world == null) {
             return;
         }
 
-        BlockPos partner = pos.add(ChestBlock.getConnectedDirection(state).getVector());
+        BlockPos partner = pos.add(ChestBlock.getConnectedDirection(state).step());
         BlockState partnerState = world.getBlockState(partner);
         if (partnerState.getBlock() instanceof ChestBlock) {
             this.ensureContents(partner, partnerState);
@@ -357,17 +357,17 @@ public final class ContainerDataManager {
      * 所以转换不出来时，按客户端这边的容器格子数建一个空背包——空是内容，不是没数据。
      */
     private static Container inventoryFromNbt(BlockPos pos, BlockState state, CompoundTag nbt) {
-        Level world = Minecraft.getInstance().world;
+        Level world = Minecraft.getInstance().level;
         if (world == null) {
             return null;
         }
 
         int expectedSize = expectedContainerSize(world, pos, state);
-        RegistryAccess registryManager = world.getRegistryManager();
+        RegistryAccess registryManager = world.registryAccess();
 
         if (nbt != null) {
             Container inventory = InventoryUtils.getNbtInventory(nbt, expectedSize, registryManager);
-            if (inventory != null && inventory.size() > 0) {
+            if (inventory != null && inventory.getContainerSize() > 0) {
                 return copyOf(inventory);
             }
         }
@@ -388,9 +388,9 @@ public final class ContainerDataManager {
 
     /** 服务端那边的背包是活的，跨 tick 持有不安全，统一拷一份。 */
     private static Container copyOf(Container source) {
-        SimpleContainer copy = new SimpleContainer(source.size());
-        for (int i = 0; i < source.size(); i++) {
-            copy.setStack(i, source.getStack(i).copy());
+        SimpleContainer copy = new SimpleContainer(source.getContainerSize());
+        for (int i = 0; i < source.getContainerSize(); i++) {
+            copy.setStack(i, source.getItem(i).copy());
         }
         return copy;
     }

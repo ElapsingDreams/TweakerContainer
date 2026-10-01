@@ -33,10 +33,10 @@ public final class PlacementContainerAccess {
             return getSchematicInventoryInternal(worldPos, worldState);
 
         // Double chest handling
-        Level world = Minecraft.getInstance().world;
+        Level world = Minecraft.getInstance().level;
         if (world == null)
             return Optional.empty();
-        BlockPos adjacentChest = worldPos.add(ChestBlock.getConnectedDirection(worldState).getVector());
+        BlockPos adjacentChest = worldPos.add(ChestBlock.getConnectedDirection(worldState).step());
         BlockState adjacentState = world.getBlockState(adjacentChest);
 
         Optional<SimpleContainer> opt1 = getSchematicInventoryInternal(worldPos, worldState);
@@ -68,11 +68,11 @@ public final class PlacementContainerAccess {
             return false;
         }
 
-        Level world = Minecraft.getInstance().world;
+        Level world = Minecraft.getInstance().level;
         if (world == null) {
             return false;
         }
-        BlockPos adjacentChest = worldPos.add(ChestBlock.getConnectedDirection(worldState).getVector());
+        BlockPos adjacentChest = worldPos.add(ChestBlock.getConnectedDirection(worldState).step());
         return matchSchematicContainer(adjacentChest, world.getBlockState(adjacentChest)) != null;
     }
 
@@ -110,9 +110,9 @@ public final class PlacementContainerAccess {
 
     private static SimpleContainer merge(Container first, Container second) {
         CompoundContainer combined = new CompoundContainer(first, second);
-        SimpleContainer inventory = new SimpleContainer(combined.size());
-        for (int i = 0; i < combined.size(); i++) {
-            inventory.setStack(i, combined.getStack(i));
+        SimpleContainer inventory = new SimpleContainer(combined.getContainerSize());
+        for (int i = 0; i < combined.getContainerSize(); i++) {
+            inventory.setItem(i, combined.getItem(i));
         }
         return inventory;
     }
@@ -123,7 +123,7 @@ public final class PlacementContainerAccess {
     private static ChestType getChestType(BlockState state) {
         if (!(state.getBlock() instanceof ChestBlock))
             return ChestType.SINGLE;
-        return state.get(ChestBlock.CHEST_TYPE);
+        return state.get(ChestBlock.TYPE);
     }
 
     @Nullable
@@ -139,11 +139,11 @@ public final class PlacementContainerAccess {
         if (nbt == null)
             return null;
 
-        Level world = Minecraft.getInstance().world;
+        Level world = Minecraft.getInstance().level;
         if (world == null)
             return null;
-        var lookup = world.getRegistryManager();
-        var blockEntity = BlockEntity.createFromNbt(
+        var lookup = world.registryAccess();
+        var blockEntity = BlockEntity.loadStatic(
                 placementPos.pos(),
                 placementPos.blockState(),
                 nbt,
@@ -154,11 +154,11 @@ public final class PlacementContainerAccess {
             return null;
         }
 
-        var inventory = new SimpleContainer(schematicInventory.size());
+        var inventory = new SimpleContainer(schematicInventory.getContainerSize());
 
-        for (int i = 0; i < inventory.size(); i++) {
-            var stack = schematicInventory.getStack(i);
-            inventory.setStack(i, stack);
+        for (int i = 0; i < inventory.getContainerSize(); i++) {
+            var stack = schematicInventory.getItem(i);
+            inventory.setItem(i, stack);
         }
 
         return inventory;

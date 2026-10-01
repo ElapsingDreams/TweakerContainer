@@ -48,7 +48,7 @@ public final class BlockHighlighterRender {
 
     private static void onDisconnect(ClientPacketListener clientPlayNetworkHandler, Minecraft minecraftClient) {
         HighlightConfig.setEnabled(false);
-        HighlightState.get().clearAll();
+        HighlightState.getValue().clearAll();
     }
 
     // 检查是否手持触发物品
@@ -71,7 +71,7 @@ public final class BlockHighlighterRender {
             return;
         }
 
-        HighlightState state = HighlightState.get();
+        HighlightState state = HighlightState.getValue();
         state.ensureUpToDate();
 
         boolean isHoldingTrigger = isHoldingTriggerItem();
@@ -175,7 +175,7 @@ public final class BlockHighlighterRender {
     private static void renderChestOutline(Vec3 cameraPos, BlockPos pos1, BlockPos pos2,
                                            Color4f color, boolean throughWalls) {
         Vec3 center = Vec3.atCenterOf(pos1).add(Vec3.atCenterOf(pos2)).multiply(0.5D);
-        if (cameraPos.squaredDistanceTo(center) > MAX_RENDER_DISTANCE_SQ) {
+        if (cameraPos.distanceToSqr(center) > MAX_RENDER_DISTANCE_SQ) {
             return;
         }
 
@@ -205,6 +205,6 @@ public final class BlockHighlighterRender {
     }
 
     private static boolean isWithinRenderDistance(Vec3 cameraPos, BlockPos pos) {
-        return cameraPos.squaredDistanceTo(Vec3.atCenterOf(pos)) <= MAX_RENDER_DISTANCE_SQ;
+        return cameraPos.distanceToSqr(Vec3.atCenterOf(pos)) <= MAX_RENDER_DISTANCE_SQ;
     }
 }

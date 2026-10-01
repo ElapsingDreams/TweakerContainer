@@ -22,7 +22,7 @@ import fi.dy.masa.malilib.util.data.Color4f;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.Items;
 import net.minecraft.core.registries.BuiltInRegistries;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import org.slf4j.Logger;
 
 import java.nio.file.Files;
@@ -342,7 +342,7 @@ public class HighlightConfig implements IConfigHandler {
             return DEFAULT_TRIGGER_ITEM;
         }
 
-        ResourceLocation identifier = ResourceLocation.tryParse(itemId);
+        Identifier identifier = Identifier.tryParse(itemId);
         if (identifier == null || !BuiltInRegistries.ITEM.containsId(identifier)) {
             return DEFAULT_TRIGGER_ITEM;
         }

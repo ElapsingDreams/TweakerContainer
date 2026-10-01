@@ -45,7 +45,7 @@ public final class InteractionHandler {
             return InteractionResult.PASS;
         }
 
-        HighlightState.get().setProjectionCorner(pos, true);
+        HighlightState.getValue().setProjectionCorner(pos, true);
         return SUPPRESSED_RESULT;
     }
 
@@ -54,7 +54,7 @@ public final class InteractionHandler {
             return InteractionResult.PASS;
         }
 
-        HighlightState state = HighlightState.get();
+        HighlightState state = HighlightState.getValue();
 
         // 潜行右键清除标记：只清当前位置真的画着框的东西，没框的地方不响应也不提示
         if (player.isShiftKeyDown() && hitResult.getType() == BlockHitResult.Type.BLOCK && isHoldingTriggerItem() && isEnabled()) {
@@ -132,7 +132,7 @@ public final class InteractionHandler {
             return false;
         }
 
-        return !HighlightState.get().isProjectionContainer(pos) || HighlightConfig.isSuppressProjectionOpening();
+        return !HighlightState.getValue().isProjectionContainer(pos) || HighlightConfig.isSuppressProjectionOpening();
     }
 
     /**
@@ -174,7 +174,7 @@ public final class InteractionHandler {
             return false;
         }
 
-        HighlightState state = HighlightState.get();
+        HighlightState state = HighlightState.getValue();
         state.setTempProcessingPos(hitResult.getBlockPos());
 
         // 空手右键只是开箱子，不该顺手把标记撤掉
