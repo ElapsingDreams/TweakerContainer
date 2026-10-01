@@ -41,20 +41,20 @@ public final class InteractionHandler {
      * 那条由 {@code ClientPlayerInteractionManagerMixin} 按 {@link #shouldSuppressBlockBreaking()} 拦。
      */
     private static InteractionResult onBlockAttack(Player player, Level world, InteractionHand hand, BlockPos pos, Direction direction) {
-        if (!world.isClientSide || !isCornerSelecting()) {
+        if (!world.isClientSide() || !isCornerSelecting()) {
             return InteractionResult.PASS;
         }
 
-        HighlightState.getValue().setProjectionCorner(pos, true);
+        HighlightState.get().setProjectionCorner(pos, true);
         return SUPPRESSED_RESULT;
     }
 
     private static InteractionResult onBlockUse(Player player, Level world, InteractionHand hand, BlockHitResult hitResult) {
-        if (!world.isClientSide) {
+        if (!world.isClientSide()) {
             return InteractionResult.PASS;
         }
 
-        HighlightState state = HighlightState.getValue();
+        HighlightState state = HighlightState.get();
 
         // 潜行右键清除标记：只清当前位置真的画着框的东西，没框的地方不响应也不提示
         if (player.isShiftKeyDown() && hitResult.getType() == BlockHitResult.Type.BLOCK && isHoldingTriggerItem() && isEnabled()) {
@@ -66,8 +66,8 @@ public final class InteractionHandler {
                     || (!state.getProjectionContainers().isEmpty()
                         && PlacementContainerAccess.isSchematicContainer(pos, world.getBlockState(pos)));
             if (projectionSide && state.removeProjectionContainer(pos)) {
-                player.displayClientMessage(Component.translatable("tweakercontainer.message.removed_schem",
-                        pos.getX(), pos.getY(), pos.getZ()), true);
+                player.sendOverlayMessage(Component.translatable("tweakercontainer.message.removed_schem",
+                        pos.getX(), pos.getY(), pos.getZ()));
                 return SUPPRESSED_RESULT;
             }
 
@@ -75,8 +75,8 @@ public final class InteractionHandler {
             // 大箱子按整箱清，点哪一半都清整箱
             if (state.isStorageContainer(pos) && state.isStorageContainerPresent(pos, world)
                     && state.removeWholeStorageContainer(pos)) {
-                player.displayClientMessage(Component.translatable("tweakercontainer.message.removed_storage",
-                        pos.getX(), pos.getY(), pos.getZ()), true);
+                player.sendOverlayMessage(Component.translatable("tweakercontainer.message.removed_storage",
+                        pos.getX(), pos.getY(), pos.getZ()));
                 return SUPPRESSED_RESULT;
             }
         }
@@ -90,8 +90,8 @@ public final class InteractionHandler {
             // 框完就把选框收掉：留着会和刚框出来的那些框叠在一起，分不清哪个是选框
             state.clearProjectionCorners();
 
-            player.displayClientMessage(Component.translatable("tweakercontainer.message.corner_selected",
-                    selected.projections(), selected.storages()), true);
+            player.sendOverlayMessage(Component.translatable("tweakercontainer.message.corner_selected",
+                    selected.projections(), selected.storages()));
             return SUPPRESSED_RESULT;
         }
 
@@ -132,7 +132,7 @@ public final class InteractionHandler {
             return false;
         }
 
-        return !HighlightState.getValue().isProjectionContainer(pos) || HighlightConfig.isSuppressProjectionOpening();
+        return !HighlightState.get().isProjectionContainer(pos) || HighlightConfig.isSuppressProjectionOpening();
     }
 
     /**
@@ -174,7 +174,7 @@ public final class InteractionHandler {
             return false;
         }
 
-        HighlightState state = HighlightState.getValue();
+        HighlightState state = HighlightState.get();
         state.setTempProcessingPos(hitResult.getBlockPos());
 
         // 空手右键只是开箱子，不该顺手把标记撤掉

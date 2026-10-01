@@ -471,7 +471,7 @@ public final class HighlightState {
         Map<ItemType, Integer> playerCount = new HashMap<>();
         Player player = Minecraft.getInstance().player;
         if (player != null) {
-            for (int i = 0; i < player.getInventory().size(); i++) {
+            for (int i = 0; i < player.getInventory().getContainerSize(); i++) {
                 merge(playerCount, player.getInventory().getStack(i), MAX_NESTING_DEPTH);
             }
         }
@@ -593,7 +593,7 @@ public final class HighlightState {
         }
 
         if (world != null && state != null && state.getBlock() instanceof ChestBlock) {
-            ChestType chestType = state.get(ChestBlock.TYPE);
+            ChestType chestType = state.getValue(ChestBlock.TYPE);
             if (chestType != ChestType.SINGLE && inv.getContainerSize() % 2 == 0) {
                 int halfSize = inv.getContainerSize() / 2;
                 // 与 PlacementContainerAccess 的顺序保持一致：RIGHT 时本格那半在前
@@ -619,11 +619,11 @@ public final class HighlightState {
         if (world == null || state == null || !(state.getBlock() instanceof ChestBlock)) {
             return null;
         }
-        if (state.get(ChestBlock.TYPE) == ChestType.SINGLE) {
+        if (state.getValue(ChestBlock.TYPE) == ChestType.SINGLE) {
             return null;
         }
 
-        BlockPos partner = pos.add(ChestBlock.getConnectedDirection(state).step());
+        BlockPos partner = pos.relative(ChestBlock.getConnectedDirection(state));
         return world.getBlockState(partner).getBlock() instanceof ChestBlock ? partner : null;
     }
 

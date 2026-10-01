@@ -48,7 +48,7 @@ public final class BlockHighlighterRender {
 
     private static void onDisconnect(ClientPacketListener clientPlayNetworkHandler, Minecraft minecraftClient) {
         HighlightConfig.setEnabled(false);
-        HighlightState.getValue().clearAll();
+        HighlightState.get().clearAll();
     }
 
     // 检查是否手持触发物品
@@ -67,28 +67,28 @@ public final class BlockHighlighterRender {
             return;
         }
         Minecraft client = Minecraft.getInstance();
-        if (client.player == null || client.world == null) {
+        if (client.player == null || client.level == null) {
             return;
         }
 
-        HighlightState state = HighlightState.getValue();
+        HighlightState state = HighlightState.get();
         state.ensureUpToDate();
 
         boolean isHoldingTrigger = isHoldingTriggerItem();
-        Vec3 cameraPos = context.camera().getPos();
+        Vec3 cameraPos = context.camera().getPosition();
         boolean throughWalls = HighlightConfig.isSeeThrough();
 
         if (isHoldingTrigger) {
             Color4f storageColor = HighlightConfig.getStorageContainerColor();
             for (BlockPos storagePos : state.getStorageContainers()) {
-                renderContainer(state, client.world, cameraPos, storagePos, storageColor, throughWalls,
+                renderContainer(state, client.level, cameraPos, storagePos, storageColor, throughWalls,
                         state.getStorageContainers());
             }
         } else {
             Set<BlockPos> matching = state.getMatchingStorageContainers();
             Color4f matchingColor = HighlightConfig.getMatchingContainerColor();
             for (BlockPos matchingPos : matching) {
-                renderContainer(state, client.world, cameraPos, matchingPos, matchingColor, throughWalls, matching);
+                renderContainer(state, client.level, cameraPos, matchingPos, matchingColor, throughWalls, matching);
             }
         }
 

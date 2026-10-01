@@ -98,8 +98,8 @@ public final class ServuxTweaksChannel {
         }
 
         try {
-            PayloadTypeRegistry.playC2S().register(ServuxTweaksPayload.ID, ServuxTweaksPayload.CODEC);
-            PayloadTypeRegistry.playS2C().register(ServuxTweaksPayload.ID, ServuxTweaksPayload.CODEC);
+            PayloadTypeRegistry.serverboundPlay().register(ServuxTweaksPayload.ID, ServuxTweaksPayload.CODEC);
+            PayloadTypeRegistry.clientboundPlay().register(ServuxTweaksPayload.ID, ServuxTweaksPayload.CODEC);
             ClientPlayNetworking.registerGlobalReceiver(ServuxTweaksPayload.ID,
                     (payload, context) -> context.client().execute(() -> this.onPacket(payload.data())));
             this.installed = true;
@@ -143,7 +143,7 @@ public final class ServuxTweaksChannel {
      */
     private static boolean isChannelRegistered() {
         try {
-            Object registry = PayloadTypeRegistry.playC2S();
+            Object registry = PayloadTypeRegistry.serverboundPlay();
             Object codec = registry.getClass().getMethod("get", Identifier.class).invoke(registry, CHANNEL_ID);
             return codec != null;
         } catch (Throwable t) {
@@ -304,7 +304,7 @@ public final class ServuxTweaksChannel {
     }
 
     private void onPacket(ServuxTweaksPacket packet) {
-        switch (packet.type()) {
+        switch (packet.messageType()) {
             case ServuxTweaksPacket.TYPE_S2C_METADATA -> this.onMetadata();
             case ServuxTweaksPacket.TYPE_S2C_BLOCK_NBT_RESPONSE_SIMPLE -> this.onBlockEntityData(packet);
             default -> {
@@ -346,12 +346,12 @@ public final class ServuxTweaksChannel {
                 new CustomPacketPayload.Type<>(ServuxTweaksChannel.CHANNEL_ID);
 
         public static final StreamCodec<net.minecraft.network.FriendlyByteBuf, ServuxTweaksPayload> CODEC =
-                CustomPacketPayload.codecOf(
+                CustomPacketPayload.codec(
                         (payload, buf) -> payload.data().write(buf),
                         buf -> new ServuxTweaksPayload(ServuxTweaksPacket.read(buf)));
 
         @Override
-        public CustomPacketPayload.Type<? extends CustomPacketPayload> getId() {
+        public CustomPacketPayload.Type<? extends CustomPacketPayload> type() {
             return ID;
         }
     }

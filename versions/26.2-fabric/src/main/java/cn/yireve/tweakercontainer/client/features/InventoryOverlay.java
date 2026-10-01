@@ -8,7 +8,7 @@ import fi.dy.masa.malilib.util.WorldUtils;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.client.Minecraft;
 import net.minecraft.world.Container;
-import net.minecraft.world.inventory.MenuProvider;
+import net.minecraft.world.MenuProvider;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.level.Level;
@@ -47,7 +47,7 @@ public class InventoryOverlay {
 
         BlockState state = world.getBlockState(pos);
         Optional<Container> inventory = ContainerUtils.validateContainer(world, pos, state);
-        return inventory.isPresent() && inventory.get() instanceof ScreenHandlerFactory;
+        return inventory.isPresent() && inventory.get() instanceof MenuProvider;
     }
 
     /**
@@ -67,7 +67,7 @@ public class InventoryOverlay {
         }
 
         BlockState state = world.getBlockState(pos);
-        HighlightState highlightState = HighlightState.getValue();
+        HighlightState highlightState = HighlightState.get();
 
         // 蓝图里同样是容器的位置（也就是投影区的箱子）只可能是投影来源，绝不能登记成材料容器，
         // 否则投影上会冒出蓝框、取消时也会提示成清了材料。蓝图内容读不出来（比如空箱子）就不登记

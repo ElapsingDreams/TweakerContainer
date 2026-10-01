@@ -66,7 +66,7 @@ public final class ServuxTweaksPacket {
         return new ServuxTweaksPacket(TYPE_S2C_BLOCK_NBT_RESPONSE_SIMPLE, pos, nbt);
     }
 
-    public int type() {
+    public int messageType() {
         return this.type;
     }
 

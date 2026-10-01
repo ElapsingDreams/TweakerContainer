@@ -86,7 +86,7 @@ public final class ContainerDataManager {
      * 已有内容、或已经在查的位置会直接跳过，所以重复右键不会反复发查询。
      */
     public void ensureContents(BlockPos pos, BlockState state) {
-        if (pos == null || state == null || HighlightState.getValue().hasContents(pos.immutable())) {
+        if (pos == null || state == null || HighlightState.get().hasContents(pos.immutable())) {
             return;
         }
 
@@ -131,7 +131,7 @@ public final class ContainerDataManager {
 
         Minecraft client = Minecraft.getInstance();
         Player player = client.player;
-        Level world = client.world;
+        Level world = client.level;
         if (player == null || world == null) {
             return;
         }
@@ -173,10 +173,10 @@ public final class ContainerDataManager {
 
     /** 玩家附近已登记的容器，按坐标排序让轮询顺序稳定。 */
     private static List<BlockPos> nearbyContainers(Player player) {
-        Vec3 playerPos = player.getPos();
+        Vec3 playerPos = player.position();
         List<BlockPos> result = new ArrayList<>();
 
-        for (BlockPos pos : HighlightState.getValue().getStorageContainers()) {
+        for (BlockPos pos : HighlightState.get().getStorageContainers()) {
             if (playerPos.distanceToSqr(Vec3.atCenterOf(pos)) <= REFRESH_RANGE_SQ) {
                 result.add(pos);
             }
@@ -221,8 +221,8 @@ public final class ContainerDataManager {
     private static Level serverWorld() {
         Minecraft client = Minecraft.getInstance();
         IntegratedServer server = client.getSingleplayerServer();
-        ClientLevel clientWorld = client.world;
-        return server == null || clientWorld == null ? null : server.getWorld(clientWorld.dimension());
+        ClientLevel clientWorld = client.level;
+        return server == null || clientWorld == null ? null : server.getLevel(clientWorld.dimension());
     }
 
     /**
@@ -252,7 +252,7 @@ public final class ContainerDataManager {
         this.pending.remove(pos);
 
         if (inventory != null) {
-            HighlightState.getValue().acceptStorageContents(pos, state, inventory);
+            HighlightState.get().acceptStorageContents(pos, state, inventory);
             this.ensureChestPartner(pos, state);
             return;
         }
@@ -312,7 +312,7 @@ public final class ContainerDataManager {
             return;
         }
 
-        HighlightState.getValue().acceptStorageContents(pos, state, inventory);
+        HighlightState.get().acceptStorageContents(pos, state, inventory);
         this.ensureChestPartner(pos, state);
     }
 
@@ -333,7 +333,7 @@ public final class ContainerDataManager {
     /** 大箱子的另一半是另一个方块实体，各读各的；拿到两半后 {@link HighlightState} 会把它们配上对。 */
     private void ensureChestPartner(BlockPos pos, BlockState state) {
         if (state == null || !(state.getBlock() instanceof ChestBlock)
-                || state.get(ChestBlock.TYPE) == ChestType.SINGLE) {
+                || state.getValue(ChestBlock.TYPE) == ChestType.SINGLE) {
             return;
         }
 
@@ -342,7 +342,7 @@ public final class ContainerDataManager {
             return;
         }
 
-        BlockPos partner = pos.add(ChestBlock.getConnectedDirection(state).step());
+        BlockPos partner = pos.relative(ChestBlock.getConnectedDirection(state));
         BlockState partnerState = world.getBlockState(partner);
         if (partnerState.getBlock() instanceof ChestBlock) {
             this.ensureContents(partner, partnerState);
@@ -382,7 +382,7 @@ public final class ContainerDataManager {
         }
 
         return ContainerUtils.validateContainer(world, pos, state)
-                .map(Container::size)
+                .map(Container::getContainerSize)
                 .orElse(-1);
     }
 
@@ -390,7 +390,7 @@ public final class ContainerDataManager {
     private static Container copyOf(Container source) {
         SimpleContainer copy = new SimpleContainer(source.getContainerSize());
         for (int i = 0; i < source.getContainerSize(); i++) {
-            copy.setStack(i, source.getItem(i).copy());
+            copy.setItem(i, source.getItem(i).copy());
         }
         return copy;
     }

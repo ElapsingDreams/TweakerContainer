@@ -28,7 +28,7 @@ public class GuiConfigs extends GuiConfigsBase {
         // 注意 ButtonBase 只对悬停提示做翻译，按钮文字得自己翻好再传进去
         ButtonGeneric clearButton = new ButtonGeneric(10, 24, 100, 20,
                 StringUtils.translate("tweakercontainer.gui.button.clear_all"));
-        this.addButton(clearButton, (button, mouseButton) -> HighlightState.getValue().clearAll());
+        this.addButton(clearButton, (button, mouseButton) -> HighlightState.get().clearAll());
     }
 
     @Override

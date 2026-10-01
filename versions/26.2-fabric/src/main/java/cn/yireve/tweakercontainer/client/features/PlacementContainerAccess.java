@@ -36,7 +36,7 @@ public final class PlacementContainerAccess {
         Level world = Minecraft.getInstance().level;
         if (world == null)
             return Optional.empty();
-        BlockPos adjacentChest = worldPos.add(ChestBlock.getConnectedDirection(worldState).step());
+        BlockPos adjacentChest = worldPos.relative(ChestBlock.getConnectedDirection(worldState));
         BlockState adjacentState = world.getBlockState(adjacentChest);
 
         Optional<SimpleContainer> opt1 = getSchematicInventoryInternal(worldPos, worldState);
@@ -72,7 +72,7 @@ public final class PlacementContainerAccess {
         if (world == null) {
             return false;
         }
-        BlockPos adjacentChest = worldPos.add(ChestBlock.getConnectedDirection(worldState).step());
+        BlockPos adjacentChest = worldPos.relative(ChestBlock.getConnectedDirection(worldState));
         return matchSchematicContainer(adjacentChest, world.getBlockState(adjacentChest)) != null;
     }
 
@@ -97,7 +97,7 @@ public final class PlacementContainerAccess {
         Optional<Container> schemInv = ContainerUtils.validateContainer(worldPos, placementPos.blockState());
         // Schematic and world blocks don't match
         if (schemInv.isEmpty()
-                || dummyInv.get().size() != schemInv.get().size()
+                || dummyInv.get().getContainerSize() != schemInv.get().getContainerSize()
                 || !(schemInv.get() instanceof BlockEntity schemBE)
                 || !(dummyInv.get() instanceof BlockEntity dummyBE)
                 || schemBE.getType() != dummyBE.getType()
@@ -123,7 +123,7 @@ public final class PlacementContainerAccess {
     private static ChestType getChestType(BlockState state) {
         if (!(state.getBlock() instanceof ChestBlock))
             return ChestType.SINGLE;
-        return state.get(ChestBlock.TYPE);
+        return state.getValue(ChestBlock.TYPE);
     }
 
     @Nullable

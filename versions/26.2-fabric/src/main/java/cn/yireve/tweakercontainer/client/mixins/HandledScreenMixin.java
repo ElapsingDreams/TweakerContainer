@@ -9,7 +9,7 @@ import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.screens.inventory.CreativeModeInventoryScreen;
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
 import net.minecraft.client.gui.screens.inventory.MenuAccess;
-import net.minecraft.world.entity.player.Container;
+import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.inventory.ContainerListener;
@@ -75,7 +75,7 @@ public abstract class HandledScreenMixin<T extends AbstractContainerMenu> {
         // 关闭界面时清掉当前容器记录，否则再打开背包会被当成还停留在投影容器里
         InventoryOverlay.clearCurrentContainer();
         if (!isEnabled()) return;
-        HighlightState.getValue().updateMatching();
+        HighlightState.get().updateMatching();
     }
 
     /**
@@ -90,7 +90,7 @@ public abstract class HandledScreenMixin<T extends AbstractContainerMenu> {
         if (!isEnabled()) return;
 
         // 只处理刚右击过的容器；玩家背包、创造模式物品栏等界面没有待处理坐标
-        BlockPos clickedPos = HighlightState.getValue().getAndClearTempProcessingPos();
+        BlockPos clickedPos = HighlightState.get().getAndClearTempProcessingPos();
         if (clickedPos == null || isNonContainerScreen()) return;
 
         AbstractContainerMenu handler = ((MenuAccess<AbstractContainerMenu>) (Object) this).getMenu();
@@ -107,13 +107,13 @@ public abstract class HandledScreenMixin<T extends AbstractContainerMenu> {
         // 这样搬东西时槽位数字与匹配结果基本立刻跟上
         handler.addSlotListener(new ContainerListener() {
             @Override
-            public void onSlotUpdate(AbstractContainerMenu screenHandler, int slotId, ItemStack stack) {
+            public void slotChanged(AbstractContainerMenu screenHandler, int slotId, ItemStack stack) {
                 tcRecapturePending = true;
-                HighlightState.getValue().markDirty();
+                HighlightState.get().markDirty();
             }
 
             @Override
-            public void onPropertyUpdate(AbstractContainerMenu screenHandler, int property, int value) {
+            public void dataChanged(AbstractContainerMenu screenHandler, int property, int value) {
                 // 属性变化（例如熔炉进度）与容器物品无关，忽略
             }
         });
@@ -136,7 +136,7 @@ public abstract class HandledScreenMixin<T extends AbstractContainerMenu> {
         AbstractContainerMenu handler = ((MenuAccess<AbstractContainerMenu>) (Object) this).getMenu();
         for (Slot slot : handler.slots) {
             if (!(slot.container instanceof Inventory)) {
-                HighlightState.getValue().cacheStorageInventory(tcCapturePos, slot.container);
+                HighlightState.get().cacheStorageInventory(tcCapturePos, slot.container);
                 return;
             }
         }
@@ -158,7 +158,7 @@ public abstract class HandledScreenMixin<T extends AbstractContainerMenu> {
             captureContainer();
         }
 
-        HighlightState.getValue().ensureUpToDate();
+        HighlightState.get().ensureUpToDate();
     }
 
     @Inject(
@@ -191,7 +191,7 @@ public abstract class HandledScreenMixin<T extends AbstractContainerMenu> {
     private void onDrawSlot(GuiGraphicsExtractor context, Slot slot, CallbackInfo ci) {
         if (!isEnabled()) return;
 
-        HighlightState state = HighlightState.getValue();
+        HighlightState state = HighlightState.get();
 
         // 背景必须画在物品之前，否则会盖住图标
         int color = getHighlightColor(state, slot);
@@ -212,13 +212,13 @@ public abstract class HandledScreenMixin<T extends AbstractContainerMenu> {
         if (stack.isEmpty() || tcLabelAmount <= 0) return;
 
         // 以槽位左上角为锚点，右/下偏移与字号都由配置决定；避开原版画在右下角的堆叠数量
-        Matrix3x2fStack matrices = context.getMatrices();
+        Matrix3x2fStack matrices = context.pose();
         matrices.pushMatrix();
         matrices.translate(slot.x + HighlightConfig.getHintTextOffsetX(),
                 slot.y + HighlightConfig.getHintTextOffsetY());
         float scale = HighlightConfig.getHintTextScale();
         matrices.scale(scale, scale);
-        context.drawText(Minecraft.getInstance().textRenderer,
+        context.text(Minecraft.getInstance().font,
                 Integer.toString(tcLabelAmount), 0, 0, HighlightConfig.getSlotCountTextColor(), true);
         matrices.popMatrix();
     }

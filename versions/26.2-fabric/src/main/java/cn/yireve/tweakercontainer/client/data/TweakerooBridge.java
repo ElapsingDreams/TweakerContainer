@@ -84,7 +84,7 @@ final class TweakerooBridge {
         }
 
         try {
-            Object tweakerooPacket = switch (packet.type()) {
+            Object tweakerooPacket = switch (packet.messageType()) {
                 case ServuxTweaksPacket.TYPE_C2S_METADATA_REQUEST -> metadataRequestFactory.invoke(null, packet.nbt());
                 case ServuxTweaksPacket.TYPE_C2S_BLOCK_ENTITY_REQUEST -> blockEntityRequestFactory.invoke(null, packet.pos());
                 default -> null;
