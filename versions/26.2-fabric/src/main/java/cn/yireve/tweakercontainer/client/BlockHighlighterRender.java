@@ -3,6 +3,7 @@ package cn.yireve.tweakercontainer.client;
 import cn.yireve.tweakercontainer.client.config.HighlightConfig;
 import cn.yireve.tweakercontainer.client.data.ProjectionSelectionMode;
 import com.mojang.blaze3d.pipeline.RenderPipeline;
+import com.mojang.blaze3d.vertex.MeshData;
 import com.mojang.logging.LogUtils;
 import fi.dy.masa.malilib.render.MaLiLibPipelines;
 import fi.dy.masa.malilib.render.RenderContext;
@@ -47,6 +48,9 @@ public final class BlockHighlighterRender implements IRenderer {
     // 超出该距离（方块）的线框不再绘制
     private static final double MAX_RENDER_DISTANCE_SQ = 64.0D * 64.0D;
 
+    // 临时诊断用（渲染修好后删掉）
+    private static long tcLastDebugLog = 0L;
+
     private BlockHighlighterRender() {
     }
 
@@ -89,6 +93,14 @@ public final class BlockHighlighterRender implements IRenderer {
 
         HighlightState state = HighlightState.get();
         state.ensureUpToDate();
+
+        // 临时诊断：确认世界渲染回调真的被调用、以及状态里有多少容器（渲染修好后删掉）
+        long now = System.currentTimeMillis();
+        if (now - tcLastDebugLog > 5000L) {
+            tcLastDebugLog = now;
+            LOGGER.info("tc 渲染回调: 存储容器={} 匹配={} 相机={}",
+                    state.getStorageContainers().size(), state.getMatchingStorageContainers().size(), cameraPos);
+        }
 
         boolean isHoldingTrigger = isHoldingTriggerItem();
         boolean throughWalls = HighlightConfig.isSeeThrough();
@@ -210,8 +222,13 @@ public final class BlockHighlighterRender implements IRenderer {
         try (RenderContext renderContext = new RenderContext(() -> "tc_storage_box", pipeline, 256)) {
             var builder = renderContext.getBuilder();
             RenderUtils.drawBoxAllEdgesBatchedLines(x1, y1, z1, x2, y2, z2, color, LINE_WIDTH, builder);
-            // draw() 内部会 build 再绘制，避免直接调用私有的 BufferBuilder.build()
-            renderContext.draw();
+
+            // 26.2 下必须自己 build 出 MeshData 再交给 RenderContext 画：malilib 自己的
+            // renderBlockOutline 就是这么调的（builder.build() -> draw(mesh, true, true)），
+            // 直接调无参 draw() 什么都不会出现在画面上
+            MeshData mesh = builder.build();
+            renderContext.draw(mesh, true, true);
+            mesh.close();
         } catch (Exception e) {
             LOGGER.warn("绘制大箱子线框失败", e);
         }
