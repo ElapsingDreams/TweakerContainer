@@ -62,7 +62,7 @@ public abstract class HandledScreenMixin<T extends AbstractContainerMenu> {
     @Unique
     private boolean tcShowCount;
 
-    @Inject(method = "close",
+    @Inject(method = "onClose",
         at = @At("RETURN"),
         cancellable = false
     )

@@ -5,6 +5,8 @@
       <module fileurl="file://$PROJECT_DIR$/.idea/modules/tweakercontainer.iml" filepath="$PROJECT_DIR$/.idea/modules/tweakercontainer.iml" />
       <module fileurl="file://$PROJECT_DIR$/.idea/modules/versions/1.21.8-fabric/tweakercontainer.1.21.8-fabric.main.iml" filepath="$PROJECT_DIR$/.idea/modules/versions/1.21.8-fabric/tweakercontainer.1.21.8-fabric.main.iml" />
       <module fileurl="file://$PROJECT_DIR$/.idea/modules/versions/1.21.8-fabric/tweakercontainer.1.21.8-fabric.test.iml" filepath="$PROJECT_DIR$/.idea/modules/versions/1.21.8-fabric/tweakercontainer.1.21.8-fabric.test.iml" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/modules/versions/26.2-fabric/tweakercontainer.26.2-fabric.main.iml" filepath="$PROJECT_DIR$/.idea/modules/versions/26.2-fabric/tweakercontainer.26.2-fabric.main.iml" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/modules/versions/26.2-fabric/tweakercontainer.26.2-fabric.test.iml" filepath="$PROJECT_DIR$/.idea/modules/versions/26.2-fabric/tweakercontainer.26.2-fabric.test.iml" />
     </modules>
   </component>
 </project>
