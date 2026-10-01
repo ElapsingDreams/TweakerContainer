@@ -11,7 +11,8 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.world.CompoundContainer;
 import net.minecraft.world.Container;
 import net.minecraft.world.SimpleContainer;
-import fi.dy.masa.malilib.util.InventoryUtils;
+import fi.dy.masa.malilib.util.data.tag.converter.DataConverterNbt;
+import net.minecraft.nbt.CompoundTag;
 import fi.dy.masa.malilib.util.data.tag.CompoundData;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.level.Level;
@@ -145,9 +146,16 @@ public final class PlacementContainerAccess {
         if (world == null)
             return null;
 
-        // 26.2：malilib 直接把这份数据变成容器，不用再自己拼一个方块实体出来
-        Container schematicInventory = InventoryUtils.getDataInventory(data);
-        if (schematicInventory == null) {
+        // 26.2 的 data 层转回 NBT，再按原样造方块实体（大箱子两半各读一份，由上层合并）
+        CompoundTag nbt = DataConverterNbt.toVanillaCompound(data);
+        BlockEntity blockEntity = BlockEntity.loadStatic(
+                placementPos.pos(),
+                placementPos.blockState(),
+                nbt,
+                world.registryAccess()
+        );
+
+        if (!(blockEntity instanceof Container schematicInventory)) {
             return null;
         }
 
