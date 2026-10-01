@@ -1,23 +1,17 @@
-// 1.21.6 – 1.21.8 这一档的构建：编译基线 1.21.7，映射保持项目原本的 yarn，
-// 源码就是仓库根目录的 src/（这个版本是"共享源码所在版本"）。
+// Minecraft 26.2 这一档的构建：26.1+ 官方 jar 不再混淆（也没有 mappings 可用了），
+// 所以用 Loom 的"不重映射"变体 net.fabricmc.fabric-loom：
+//   - 不需要 mappings
+//   - 依赖用普通 implementation / runtimeOnly（不再是 modImplementation）
+//   - 没有 remapJar，产物就是普通 jar
+// 源码放在本版本目录自己的 src/ 下（versions/26.2-fabric/src/），与 1.21.x 那份互不影响。
 plugins {
     id 'maven-publish'
 }
 
-apply(plugin: 'fabric-loom')
-
-// 这一档的源码就是仓库根目录的 src/：其它版本（例如 26.2）各用各自 versions/<版本>/src/，
-// 互不影响；改这里只是把本版本的源码目录指过去
-sourceSets {
-    main {
-        java.srcDirs = ["${rootDir}/src/main/java"]
-        resources.srcDirs = ["${rootDir}/src/main/resources"]
-    }
-}
+apply(plugin: 'net.fabricmc.fabric-loom')
 
 base {
-    // 产物名形如 tweakercontainer-2.2.5-1.21.7.jar：文件名里带这个构建对应的 MC 版本，
-    // jar 内部的 mod 版本保持干净的 a.b.c
+    // 产物名形如 tweakercontainer-2.2.5-26.2.jar
     archivesName = rootProject.property('archives_base_name')
     group = rootProject.property('maven_group')
     version = "${rootProject.property('mod_version')}-${project.property('dependencies.minecraft_version')}"
@@ -27,6 +21,8 @@ repositories {
     mavenCentral()
     maven { url = 'https://api.modrinth.com/maven/' }
     maven { url = 'https://maven.fabricmc.net/' }
+    // malilib / litematica 的传递依赖（conditional-mixin 等）
+    maven { url = 'https://maven.fallenbreath.me/releases' }
     // malilib / litematica：sakura-ryoko 的社区构建
     maven {
         url = 'https://masa.dy.fi/maven/sakura-ryoko'
@@ -36,16 +32,15 @@ repositories {
 
 dependencies {
     minecraft "com.mojang:minecraft:${project.property('dependencies.minecraft_version')}"
-    mappings "net.fabricmc:yarn:${project.property('dependencies.yarn_mappings')}:v2"
-    modImplementation "net.fabricmc:fabric-loader:${project.property('dependencies.loader_version')}"
-    modImplementation "net.fabricmc.fabric-api:fabric-api:${project.property('dependencies.fabric_api_version')}"
+    // 26.x 官方 jar 未混淆，不需要 mappings；依赖也不再需要 modImplementation
+    implementation "net.fabricmc:fabric-loader:${project.property('dependencies.loader_version')}"
+    implementation "net.fabricmc.fabric-api:fabric-api:${project.property('dependencies.fabric_api_version')}"
 
-    modImplementation "fi.dy.masa.malilib:malilib-fabric-${project.property('dependencies.dep_mc')}:${project.property('dependencies.malilib_version')}"
-    modImplementation "fi.dy.masa.litematica:litematica-fabric-${project.property('dependencies.dep_mc')}:${project.property('dependencies.litematica_version')}"
+    implementation "fi.dy.masa.malilib:malilib-fabric-${project.property('dependencies.dep_mc')}:${project.property('dependencies.malilib_version')}"
+    implementation "fi.dy.masa.litematica:litematica-fabric-${project.property('dependencies.dep_mc')}:${project.property('dependencies.litematica_version')}"
 }
 
 processResources {
-    // jar 里记录的 mod 版本保持 a.b.c，MC 版本只体现在文件名和依赖声明里
     inputs.property 'version', rootProject.property('mod_version')
     inputs.property 'minecraft_dependency', project.property('dependencies.minecraft_dependency')
     inputs.property 'loader_version', project.property('dependencies.loader_version')
@@ -63,12 +58,17 @@ processResources {
     }
 }
 
+// Minecraft 26.1+ 用 Java 25
 tasks.withType(JavaCompile).configureEach {
     it.options.encoding = 'UTF-8'
-    it.options.release.set(21)
+    it.options.release.set(25)
 }
 
 java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(25)
+    }
+
     withSourcesJar()
 }
 
