@@ -3,13 +3,28 @@
   "id": "tweakercontainer",
   "version": "${version}",
   "name": "TweakerContainer",
-  "description": "TweakerContainer - 按投影清单清点材料，高亮容器与缺料槽位（26.2 版本移植进行中，暂时还没有功能代码）",
+  "description": "TweakerContainer - 按投影清单清点材料，高亮容器与缺料槽位",
   "authors": [
     "YiReve"
   ],
   "contact": {},
   "license": "MIT",
   "environment": "client",
+  "entrypoints": {
+    "main": [
+      "cn.yireve.tweakercontainer.TweakerContainer"
+    ],
+    "client": [
+      "cn.yireve.tweakercontainer.client.TweakerContainerClient"
+    ]
+  },
+  "mixins": [
+    "tweakercontainer.mixins.json",
+    {
+      "config": "tweakercontainer.client.mixins.json",
+      "environment": "client"
+    }
+  ],
   "depends": {
     "fabricloader": ">=0.19.0",
     "minecraft": "${minecraft_dependency}",

@@ -32,9 +32,18 @@ repositories {
 
 dependencies {
     minecraft "com.mojang:minecraft:${project.property('dependencies.minecraft_version')}"
-    // 26.x 官方 jar 未混淆，不需要 mappings；依赖也不再需要 modImplementation
+    // 26.x 官方 jar 未混淆，不需要 mappings；依赖也不再需要 modImplementation。
+    // Fabric API 在 26.2 这边要按模块声明（umbrella 那个 jar 里是嵌套模块，未重映射的变体不会展开它）
     implementation "net.fabricmc:fabric-loader:${project.property('dependencies.loader_version')}"
-    implementation "net.fabricmc.fabric-api:fabric-api:${project.property('dependencies.fabric_api_version')}"
+    [
+            'fabric-api-base',
+            'fabric-lifecycle-events-v1',
+            'fabric-networking-api-v1',
+            'fabric-rendering-v1',
+            'fabric-events-interaction-v0'
+    ].each { module ->
+        implementation fabricApi.module(module, project.property('dependencies.fabric_api_version'))
+    }
 
     implementation "fi.dy.masa.malilib:malilib-fabric-${project.property('dependencies.dep_mc')}:${project.property('dependencies.malilib_version')}"
     implementation "fi.dy.masa.litematica:litematica-fabric-${project.property('dependencies.dep_mc')}:${project.property('dependencies.litematica_version')}"
