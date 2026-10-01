@@ -17,7 +17,7 @@ import cn.yireve.tweakercontainer.client.data.ContainerSource;
 import cn.yireve.tweakercontainer.client.data.ProjectionSelectionMode;
 import cn.yireve.tweakercontainer.client.data.ServuxTweaksChannel;
 import fi.dy.masa.malilib.util.FileUtils;
-import fi.dy.masa.malilib.util.JsonUtils;
+import fi.dy.masa.malilib.util.data.json.JsonUtils;
 import fi.dy.masa.malilib.util.data.Color4f;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.Items;
@@ -343,10 +343,10 @@ public class HighlightConfig implements IConfigHandler {
         }
 
         Identifier identifier = Identifier.tryParse(itemId);
-        if (identifier == null || !BuiltInRegistries.ITEM.containsId(identifier)) {
+        if (identifier == null || !BuiltInRegistries.ITEM.containsKey(identifier)) {
             return DEFAULT_TRIGGER_ITEM;
         }
 
-        return BuiltInRegistries.ITEM.get(identifier);
+        return BuiltInRegistries.ITEM.getValue(identifier);
     }
 }

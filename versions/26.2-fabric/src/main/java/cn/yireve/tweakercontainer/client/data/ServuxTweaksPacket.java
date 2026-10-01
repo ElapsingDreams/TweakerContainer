@@ -31,7 +31,7 @@ public final class ServuxTweaksPacket {
     /** tweakeroo 发请求时用的占位值，响应里不带这个字段（响应按坐标匹配）。 */
     private static final int TRANSACTION_ID = -1;
 
-    private static final NbtAccounter NBT_SIZE = NbtAccounter.ofUnlimitedBytes();
+    private static final NbtAccounter NBT_SIZE = NbtAccounter.unlimitedHeap();
 
     private final int type;
     @Nullable private final BlockPos pos;

@@ -422,7 +422,7 @@ public final class HighlightState {
         Map<ItemType, Integer> source = projectionView ? projectionNeedSource() : remainingNeeded;
         ItemType self = keyOf(stack);
         for (ItemType key : source.keySet()) {
-            if (key.getItem().getItem() == stack.getItem() && !key.equals(self)) {
+            if (key.getStack().getItem() == stack.getItem() && !key.equals(self)) {
                 return true;
             }
         }
@@ -472,7 +472,7 @@ public final class HighlightState {
         Player player = Minecraft.getInstance().player;
         if (player != null) {
             for (int i = 0; i < player.getInventory().getContainerSize(); i++) {
-                merge(playerCount, player.getInventory().getStack(i), MAX_NESTING_DEPTH);
+                merge(playerCount, player.getInventory().getItem(i), MAX_NESTING_DEPTH);
             }
         }
 

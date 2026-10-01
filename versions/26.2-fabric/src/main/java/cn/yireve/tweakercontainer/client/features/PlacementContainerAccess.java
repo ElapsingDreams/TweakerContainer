@@ -11,7 +11,8 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.world.CompoundContainer;
 import net.minecraft.world.Container;
 import net.minecraft.world.SimpleContainer;
-import net.minecraft.nbt.CompoundTag;
+import fi.dy.masa.malilib.util.InventoryUtils;
+import fi.dy.masa.malilib.util.data.tag.CompoundData;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.level.Level;
 import org.jetbrains.annotations.Nullable;
@@ -128,37 +129,32 @@ public final class PlacementContainerAccess {
 
     @Nullable
     private static SimpleContainer getItems(LocalPlacementPos placementPos) {
-        Map<BlockPos, CompoundTag> blockEntities = placementPos.placement().getSchematic()
+        // 26.2 起 litematica 的方块实体表给的是 malilib 新 data 层的 CompoundData，不再是 NBT
+        Map<BlockPos, CompoundData> blockEntities = placementPos.placement().getSchematic()
                 .getBlockEntityMapForRegion(placementPos.region());
         // No block entity map for the region. Shouldn't be possible unless it was manually modified
         if (blockEntities == null)
             return null;
 
-        CompoundTag nbt = blockEntities.get(placementPos.pos());
+        CompoundData data = blockEntities.get(placementPos.pos());
         // No such entry in the map
-        if (nbt == null)
+        if (data == null)
             return null;
 
         Level world = Minecraft.getInstance().level;
         if (world == null)
             return null;
-        var lookup = world.registryAccess();
-        var blockEntity = BlockEntity.loadStatic(
-                placementPos.pos(),
-                placementPos.blockState(),
-                nbt,
-                lookup
-        );
 
-        if (!(blockEntity instanceof Container schematicInventory)) {
+        // 26.2：malilib 直接把这份数据变成容器，不用再自己拼一个方块实体出来
+        Container schematicInventory = InventoryUtils.getDataInventory(data);
+        if (schematicInventory == null) {
             return null;
         }
 
-        var inventory = new SimpleContainer(schematicInventory.getContainerSize());
+        SimpleContainer inventory = new SimpleContainer(schematicInventory.getContainerSize());
 
         for (int i = 0; i < inventory.getContainerSize(); i++) {
-            var stack = schematicInventory.getItem(i);
-            inventory.setItem(i, stack);
+            inventory.setItem(i, schematicInventory.getItem(i));
         }
 
         return inventory;

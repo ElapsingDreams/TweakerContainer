@@ -9,13 +9,21 @@ import fi.dy.masa.malilib.render.RenderContext;
 import fi.dy.masa.malilib.render.RenderUtils;
 import fi.dy.masa.malilib.util.data.Color4f;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents;
-import net.fabricmc.fabric.api.client.rendering.v1.WorldRenderContext;
-import net.fabricmc.fabric.api.client.rendering.v1.WorldRenderEvents;
+import com.mojang.blaze3d.buffers.GpuBufferSlice;
+import com.mojang.blaze3d.pipeline.RenderTarget;
+import fi.dy.masa.malilib.event.RenderEventHandler;
+import fi.dy.masa.malilib.interfaces.IRenderer;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientPacketListener;
 import net.minecraft.client.multiplayer.ClientLevel;
+import net.minecraft.client.renderer.RenderBuffers;
+import net.minecraft.client.renderer.culling.Frustum;
+import net.minecraft.client.renderer.state.level.CameraRenderState;
 import net.minecraft.core.BlockPos;
+import net.minecraft.util.profiling.ProfilerFiller;
 import net.minecraft.world.phys.Vec3;
+import org.joml.Matrix4fc;
+import org.joml.Vector4f;
 import org.slf4j.Logger;
 
 import java.util.Set;
@@ -27,7 +35,8 @@ import java.util.Set;
  * Litematica 描边同一套 pipeline（{@code DEBUG_LINES_MASA_SIMPLE_*}），透视与线宽都由它处理，
  * 本类只负责颜色、距离裁剪与调用。
  */
-public final class BlockHighlighterRender {
+public final class BlockHighlighterRender implements IRenderer {
+    private static final BlockHighlighterRender INSTANCE = new BlockHighlighterRender();
     private static final Logger LOGGER = LogUtils.getLogger();
 
     // 线框相对方块表面的外扩量（格），避免与方块表面 z-fighting，同 Litematica 的 expand 参数
@@ -42,7 +51,8 @@ public final class BlockHighlighterRender {
     }
 
     public static void setup() {
-        WorldRenderEvents.AFTER_TRANSLUCENT.register(BlockHighlighterRender::onRender);
+        // 26.2 的 Fabric API 已经没有 WorldRenderEvents，世界渲染回调改走 malilib（与 Litematica 同一套）
+        RenderEventHandler.getInstance().registerWorldLastRenderer(INSTANCE);
         ClientPlayConnectionEvents.DISCONNECT.register(BlockHighlighterRender::onDisconnect);
     }
 
@@ -61,8 +71,14 @@ public final class BlockHighlighterRender {
                 || client.player.getOffhandItem().getItem() == HighlightConfig.getTriggerItem();
     }
 
+    @Override
+    public void onRenderWorldLast(RenderTarget target, Matrix4fc matrices, CameraRenderState cameraState, Frustum frustum,
+                                  RenderBuffers buffers, GpuBufferSlice bufferSlice, Vector4f fogColor, ProfilerFiller profiler) {
+        onRender(cameraState.pos);
+    }
+
     // 世界渲染回调
-    private static void onRender(WorldRenderContext context) {
+    private void onRender(Vec3 cameraPos) {
         if (!HighlightConfig.isEnabled()) {
             return;
         }
@@ -75,7 +91,6 @@ public final class BlockHighlighterRender {
         state.ensureUpToDate();
 
         boolean isHoldingTrigger = isHoldingTriggerItem();
-        Vec3 cameraPos = context.camera().getPosition();
         boolean throughWalls = HighlightConfig.isSeeThrough();
 
         if (isHoldingTrigger) {
@@ -174,7 +189,7 @@ public final class BlockHighlighterRender {
      */
     private static void renderChestOutline(Vec3 cameraPos, BlockPos pos1, BlockPos pos2,
                                            Color4f color, boolean throughWalls) {
-        Vec3 center = Vec3.atCenterOf(pos1).add(Vec3.atCenterOf(pos2)).multiply(0.5D);
+        Vec3 center = Vec3.atCenterOf(pos1).add(Vec3.atCenterOf(pos2)).scale(0.5D);
         if (cameraPos.distanceToSqr(center) > MAX_RENDER_DISTANCE_SQ) {
             return;
         }
@@ -192,11 +207,9 @@ public final class BlockHighlighterRender {
                 ? MaLiLibPipelines.DEBUG_LINES_MASA_SIMPLE_NO_DEPTH_NO_CULL
                 : MaLiLibPipelines.DEBUG_LINES_MASA_SIMPLE_LEQUAL_DEPTH;
 
-        try (RenderContext renderContext = new RenderContext(() -> "tc_storage_box", pipeline)) {
+        try (RenderContext renderContext = new RenderContext(() -> "tc_storage_box", pipeline, 256)) {
             var builder = renderContext.getBuilder();
-            RenderUtils.drawBoxAllEdgesBatchedLines(x1, y1, z1, x2, y2, z2, color, builder);
-
-            renderContext.lineWidth(LINE_WIDTH);
+            RenderUtils.drawBoxAllEdgesBatchedLines(x1, y1, z1, x2, y2, z2, color, LINE_WIDTH, builder);
             // draw() 内部会 build 再绘制，避免直接调用私有的 BufferBuilder.build()
             renderContext.draw();
         } catch (Exception e) {
