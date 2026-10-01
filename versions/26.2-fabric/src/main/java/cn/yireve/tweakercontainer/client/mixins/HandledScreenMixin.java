@@ -166,7 +166,7 @@ public abstract class HandledScreenMixin<T extends AbstractContainerMenu> {
             at = @At("HEAD"),
             cancellable = false
     )
-    private void onDrawSlots(GuiGraphicsExtractor context, CallbackInfo ci) {
+    private void onDrawSlots(GuiGraphicsExtractor context, int mouseX, int mouseY, CallbackInfo ci) {
         // 每帧重置，保证“第一个匹配到的格子”按本次绘制顺序判定
         if (tcShownPutKeys != null) {
             tcShownPutKeys.clear();
@@ -188,7 +188,7 @@ public abstract class HandledScreenMixin<T extends AbstractContainerMenu> {
             at = @At("HEAD"),
             cancellable = false
     )
-    private void onDrawSlot(GuiGraphicsExtractor context, Slot slot, CallbackInfo ci) {
+    private void onDrawSlot(GuiGraphicsExtractor context, Slot slot, int mouseX, int mouseY, CallbackInfo ci) {
         if (!isEnabled()) return;
 
         HighlightState state = HighlightState.get();
@@ -205,7 +205,7 @@ public abstract class HandledScreenMixin<T extends AbstractContainerMenu> {
             at = @At("RETURN"),
             cancellable = false
     )
-    private void onDrawSlotCount(GuiGraphicsExtractor context, Slot slot, CallbackInfo ci) {
+    private void onDrawSlotCount(GuiGraphicsExtractor context, Slot slot, int mouseX, int mouseY, CallbackInfo ci) {
         if (!isEnabled() || !tcShowCount) return;
 
         ItemStack stack = slot.getItem();
