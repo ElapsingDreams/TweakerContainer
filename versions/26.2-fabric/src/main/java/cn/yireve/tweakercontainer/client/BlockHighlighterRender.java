@@ -48,9 +48,6 @@ public final class BlockHighlighterRender implements IRenderer {
     // 超出该距离（方块）的线框不再绘制
     private static final double MAX_RENDER_DISTANCE_SQ = 64.0D * 64.0D;
 
-    // 临时诊断用（渲染修好后删掉）
-    private static long tcLastDebugLog = 0L;
-
     private BlockHighlighterRender() {
     }
 
@@ -93,14 +90,6 @@ public final class BlockHighlighterRender implements IRenderer {
 
         HighlightState state = HighlightState.get();
         state.ensureUpToDate();
-
-        // 临时诊断：确认世界渲染回调真的被调用、以及状态里有多少容器（渲染修好后删掉）
-        long now = System.currentTimeMillis();
-        if (now - tcLastDebugLog > 5000L) {
-            tcLastDebugLog = now;
-            LOGGER.info("tc 渲染回调: 存储容器={} 匹配={} 相机={}",
-                    state.getStorageContainers().size(), state.getMatchingStorageContainers().size(), cameraPos);
-        }
 
         boolean isHoldingTrigger = isHoldingTriggerItem();
         boolean throughWalls = HighlightConfig.isSeeThrough();
@@ -219,7 +208,9 @@ public final class BlockHighlighterRender implements IRenderer {
                 ? MaLiLibPipelines.DEBUG_LINES_MASA_SIMPLE_NO_DEPTH_NO_CULL
                 : MaLiLibPipelines.DEBUG_LINES_MASA_SIMPLE_LEQUAL_DEPTH;
 
-        try (RenderContext renderContext = new RenderContext(() -> "tc_storage_box", pipeline, 256)) {
+        // 第三个参数是顶点格式绑定的索引（0 = 第一个绑定），不是缓冲大小：
+        // 传错会直接 ArrayIndexOutOfBoundsException（RenderPipeline.getVertexFormatBinding）
+        try (RenderContext renderContext = new RenderContext(() -> "tc_storage_box", pipeline, 0)) {
             var builder = renderContext.getBuilder();
             RenderUtils.drawBoxAllEdgesBatchedLines(x1, y1, z1, x2, y2, z2, color, LINE_WIDTH, builder);
 
