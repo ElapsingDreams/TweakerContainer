@@ -139,7 +139,7 @@ public final class ServuxTweaksChannel {
 
         this.handshakeSent = true;
         this.handshakeSentAt = System.currentTimeMillis();
-        this.send(ServuxTweaksPacket.metadataRequest(modVersion()));
+        this.send(ServuxTweaksPacket.metadataRequest());
     }
 
     /**
@@ -204,7 +204,7 @@ public final class ServuxTweaksChannel {
     private void startHandshake() {
         this.handshakeSent = true;
         this.handshakeSentAt = System.currentTimeMillis();
-        this.send(ServuxTweaksPacket.metadataRequest(modVersion()));
+        this.send(ServuxTweaksPacket.metadataRequest());
     }
 
     /** 每个 tick 推进握手与请求的超时。 */

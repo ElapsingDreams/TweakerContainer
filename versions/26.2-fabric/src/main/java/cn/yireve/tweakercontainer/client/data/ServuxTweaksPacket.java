@@ -25,8 +25,15 @@ public final class ServuxTweaksPacket {
     public static final int TYPE_C2S_BLOCK_ENTITY_REQUEST = 3;
     public static final int TYPE_S2C_BLOCK_NBT_RESPONSE_SIMPLE = 5;
 
-    /** 通道协议版本：tweakeroo 的 {@code ServuxTweaksPacket.getVersion()} 就是写死的 1。 */
-    public static final int PROTOCOL_VERSION = 1;
+    /**
+     * 通道协议版本。
+     * <p>
+     * servux 从 0.11.5（26.2 档）起用它卡客户端：握手 NBT 里 {@code version} 是整数，
+     * 服务端用 {@code CompoundData#getIntOrDefault("version", -1)} 读，低于它要求的版本直接拒绝
+     * （日志：{@code tweaks_data: Denying access ... This Server Requires: Version 2}）。
+     * tweakeroo 26.2 的同名常量也是 2。
+     */
+    public static final int PROTOCOL_VERSION = 2;
 
     /** tweakeroo 发请求时用的占位值，响应里不带这个字段（响应按坐标匹配）。 */
     private static final int TRANSACTION_ID = -1;
@@ -43,10 +50,16 @@ public final class ServuxTweaksPacket {
         this.nbt = nbt;
     }
 
-    /** 握手请求：告诉服务端我们是谁（服务端据此把玩家标记为 registered）。 */
-    public static ServuxTweaksPacket metadataRequest(String modVersion) {
+    /**
+     * 握手请求：告诉服务端我们的协议版本（服务端据此把玩家标记为 registered）。
+     * <p>
+     * 与 tweakeroo 的 {@code EntityDataManager#requestMetadata} 完全一致：NBT 里只放一个
+     * <b>整数</b> {@code version}。以前这里放的是 mod 版本字符串，servux 取整失败会当成 -1
+     * 直接拒绝，所以 26.2 上一直连不上（"Your client protocol version is too low"）。
+     */
+    public static ServuxTweaksPacket metadataRequest() {
         CompoundTag nbt = new CompoundTag();
-        nbt.putString("version", modVersion);
+        nbt.putInt("version", PROTOCOL_VERSION);
         return new ServuxTweaksPacket(TYPE_C2S_METADATA_REQUEST, null, nbt);
     }
 
