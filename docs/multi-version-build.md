@@ -31,10 +31,10 @@ tweakercontainer/
 
 产物在 `versions/<版本>/build/libs/`：
 
-- `tweakercontainer-2.2.5-1.21.7.jar`（覆盖 1.21.6–1.21.8）
-- `tweakercontainer-2.2.5-26.2.jar`
+- `tweakercontainer-2.3.0-1.21.7.jar`（覆盖 1.21.6–1.21.8）
+- `tweakercontainer-2.3.0-26.2.jar`
 
-文件名里带的是这个构建对应的 MC 版本；**jar 内部记录的 mod 版本始终是干净的 `a.b.c`**（现在是 `2.2.5`）。
+文件名里带的是这个构建对应的 MC 版本；**jar 内部记录的 mod 版本始终是干净的 `a.b.c`**（现在是 `2.3.0`）。
 版本号规则：`a.b` 不轻易动（要完全没 bug 才升 `b`），日常只升 `c`。
 
 ## 环境要求
