@@ -73,6 +73,21 @@ final class TweakerooBridge {
     }
 
     /**
+     * tweakeroo 在不在场（只看到类名，不管反射是否全部通）。
+     * <p>
+     * 注册通道前必须先问这个：只要它在场，这条通道就一律不碰——哪怕我们这次反射没借到它的壳，
+     * 也绝不能自己注册，否则它的载荷会被我们的编码器去解，发包时在 netty 线程炸掉连接。
+     */
+    static boolean isClassPresent() {
+        try {
+            Class.forName(PACKET_CLASS);
+            return true;
+        } catch (Throwable t) {
+            return false;
+        }
+    }
+
+    /**
      * 把要发的报文包成 tweakeroo 的载荷对象。
      *
      * @return 借不到、或这个类型用不上时返回 null（调用方这会儿就该放弃这次请求）

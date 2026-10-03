@@ -1,6 +1,8 @@
 package cn.yireve.tweakercontainer.client.data;
 
 import com.mojang.logging.LogUtils;
+import fi.dy.masa.malilib.util.data.tag.CompoundData;
+import fi.dy.masa.malilib.util.data.tag.converter.DataConverterNbt;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.core.BlockPos;
@@ -53,7 +55,8 @@ final class TweakerooBridge {
             Class<?> packetClass = Class.forName(PACKET_CLASS);
             payloadClass = Class.forName(PAYLOAD_CLASS);
             payloadConstructor = payloadClass.getConstructor(packetClass);
-            metadataRequestFactory = packetClass.getMethod("MetadataRequest", CompoundTag.class);
+            // 26.2 起 tweakeroo 把 NBT 换成了 malilib 的 CompoundData，签名跟着变
+            metadataRequestFactory = packetClass.getMethod("MetadataRequest", CompoundData.class);
             blockEntityRequestFactory = packetClass.getMethod("BlockEntityRequest", BlockPos.class);
             dataAccessor = payloadClass.getMethod("data");
             packetTypeGetter = packetClass.getMethod("getPacketType");
@@ -73,6 +76,21 @@ final class TweakerooBridge {
     }
 
     /**
+     * tweakeroo 在不在场（只看到类名，不管反射是否全部通）。
+     * <p>
+     * 注册通道前必须先问这个：只要它在场，这条通道就一律不碰——哪怕我们这次反射没借到它的壳，
+     * 也绝不能自己注册，否则它的载荷会被我们的编码器去解，发包时在 netty 线程炸掉连接。
+     */
+    static boolean isClassPresent() {
+        try {
+            Class.forName(PACKET_CLASS);
+            return true;
+        } catch (Throwable t) {
+            return false;
+        }
+    }
+
+    /**
      * 把要发的报文包成 tweakeroo 的载荷对象。
      *
      * @return 借不到、或这个类型用不上时返回 null（调用方这会儿就该放弃这次请求）
@@ -85,7 +103,8 @@ final class TweakerooBridge {
 
         try {
             Object tweakerooPacket = switch (packet.messageType()) {
-                case ServuxTweaksPacket.TYPE_C2S_METADATA_REQUEST -> metadataRequestFactory.invoke(null, packet.nbt());
+                case ServuxTweaksPacket.TYPE_C2S_METADATA_REQUEST -> metadataRequestFactory.invoke(null,
+                        DataConverterNbt.fromVanillaCompound(packet.nbt() != null ? packet.nbt() : new CompoundTag()));
                 case ServuxTweaksPacket.TYPE_C2S_BLOCK_ENTITY_REQUEST -> blockEntityRequestFactory.invoke(null, packet.pos());
                 default -> null;
             };
@@ -119,12 +138,26 @@ final class TweakerooBridge {
                 case ServuxTweaksPacket.TYPE_S2C_METADATA -> ServuxTweaksPacket.metadataResponse();
                 case ServuxTweaksPacket.TYPE_S2C_BLOCK_NBT_RESPONSE_SIMPLE -> ServuxTweaksPacket.blockNbtResponse(
                         (BlockPos) posGetter.invoke(tweakerooPacket),
-                        compoundGetter.invoke(tweakerooPacket) instanceof CompoundTag nbt ? nbt : null);
+                        toVanillaNbt(compoundGetter.invoke(tweakerooPacket)));
                 default -> null;
             };
         } catch (Throwable t) {
             LOGGER.warn("解析 tweakeroo 的 servux:tweaks 载荷失败，忽略这个回包", t);
             return null;
         }
+    }
+
+    /**
+     * tweakeroo 那边取出来的方块实体数据转成原版 NBT。
+     * <p>
+     * 26.2 起它给的是 malilib 的 {@link CompoundData}（那套 data 层替代了 NBT），
+     * 老版本仍然是 {@link CompoundTag}，两种都认，省得以后它再改一次又炸。
+     */
+    @Nullable
+    private static CompoundTag toVanillaNbt(@Nullable Object data) {
+        if (data instanceof CompoundData compoundData) {
+            return DataConverterNbt.toVanillaCompound(compoundData);
+        }
+        return data instanceof CompoundTag nbt ? nbt : null;
     }
 }

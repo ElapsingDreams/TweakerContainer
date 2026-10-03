@@ -90,10 +90,17 @@ public final class ServuxTweaksChannel {
     private void install() {
         // tweakeroo 也在用这个通道：注册的事全交给它，我们借它的载荷类收发。
         // 关键是不能"抢"——先注册的一方会顶掉另一方的编码器，另一方再发包就是 ClassCastException
-        if (TweakerooBridge.isPresent()) {
+        if (TweakerooBridge.isClassPresent()) {
             this.borrowed = true;
-            this.installed = true;
-            LOGGER.info("检测到 tweakeroo，servux:tweaks 通道让给它，本项目改借它的载荷类收发");
+            // 借不到它的壳时这条通道彻底作废：既不注册也不使用 —— 自己注册会把它的载荷抢过来解，
+            // 发包时在 netty 线程炸掉连接（这正是 issue #1 里那次抢注的后果）
+            this.installed = TweakerooBridge.isPresent();
+            if (this.installed) {
+                LOGGER.info("检测到 tweakeroo，servux:tweaks 通道让给它，本项目改借它的载荷类收发");
+            } else {
+                LOGGER.warn("检测到 tweakeroo 但借不到它的载荷类（版本对不上？），"
+                        + "这条通道不注册也不使用，联机数据改用原版查询或开界面抓取");
+            }
             return;
         }
 
